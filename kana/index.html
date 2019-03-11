@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width">
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">	
+	<script>
+		//s: seion; d: dakuon; y: yoon
+		var kana = [
+			{a:"a",q:"あ",t:"h",s:1},{a:"a",q:"ア",t:"k",s:1},
+			{a:"i",q:"い",t:"h",s:1},{a:"i",q:"イ",t:"k",s:1},
+			{a:"u",q:"う",t:"h",s:1},{a:"u",q:"ウ",t:"k",s:1},
+			{a:"e",q:"え",t:"h",s:1},{a:"e",q:"エ",t:"k",s:1},
+			{a:"o",q:"お",t:"h",s:1},{a:"o",q:"オ",t:"k",s:1},
+			{a:"ka",q:"か",t:"h",s:1},{a:"ka",q:"カ",t:"k",s:1},
+			{a:"ki",q:"き",t:"h",s:1},{a:"ki",q:"キ",t:"k",s:1},
+			{a:"ku",q:"く",t:"h",s:1},{a:"ku",q:"ク",t:"k",s:1},
+			{a:"ke",q:"け",t:"h",s:1},{a:"ke",q:"ケ",t:"k",s:1},
+			{a:"ko",q:"こ",t:"h",s:1},{a:"ko",q:"コ",t:"k",s:1},
+			{a:"sa",q:"さ",t:"h",s:1},{a:"sa",q:"サ",t:"k",s:1},
+			{a:"shi",q:"し",t:"h",s:1},{a:"shi",q:"シ",t:"k",s:1},
+			{a:"su",q:"す",t:"h",s:1},{a:"su",q:"ス",t:"k",s:1},
+			{a:"se",q:"せ",t:"h",s:1},{a:"se",q:"セ",t:"k",s:1},
+			{a:"so",q:"そ",t:"h",s:1},{a:"so",q:"ソ",t:"k",s:1},
+			{a:"ta",q:"た",t:"h",s:1},{a:"ta",q:"タ",t:"k",s:1},
+			{a:"chi",q:"ち",t:"h",s:1},{a:"chi",q:"チ",t:"k",s:1},
+			{a:"tsu",q:"つ",t:"h",s:1},{a:"tsu",q:"ツ",t:"k",s:1},
+			{a:"te",q:"て",t:"h",s:1},{a:"te",q:"テ",t:"k",s:1},
+			{a:"to",q:"と",t:"h",s:1},{a:"to",q:"ト",t:"k",s:1},
+			{a:"na",q:"な",t:"h",s:1},{a:"na",q:"ナ",t:"k",s:1},
+			{a:"ni",q:"に",t:"h",s:1},{a:"ni",q:"ニ",t:"k",s:1},
+			{a:"nu",q:"ぬ",t:"h",s:1},{a:"nu",q:"ヌ",t:"k",s:1},
+			{a:"ne",q:"ね",t:"h",s:1},{a:"ne",q:"ネ",t:"k",s:1},
+			{a:"no",q:"の",t:"h",s:1},{a:"no",q:"ノ",t:"k",s:1},
+			{a:"ha",q:"は",t:"h",s:1},{a:"ha",q:"ハ",t:"k",s:1},
+			{a:"hi",q:"ひ",t:"h",s:1},{a:"hi",q:"ヒ",t:"k",s:1},
+			{a:"fu",q:"ふ",t:"h",s:1},{a:"fu",q:"フ",t:"k",s:1},
+			{a:"he",q:"へ",t:"h",s:1},{a:"he",q:"ヘ",t:"k",s:1},
+			{a:"ho",q:"ほ",t:"h",s:1},{a:"ho",q:"ホ",t:"k",s:1},
+			{a:"ma",q:"ま",t:"h",s:1},{a:"ma",q:"マ",t:"k",s:1},
+			{a:"mi",q:"み",t:"h",s:1},{a:"mi",q:"ミ",t:"k",s:1},
+			{a:"mu",q:"む",t:"h",s:1},{a:"mu",q:"ム",t:"k",s:1},
+			{a:"me",q:"め",t:"h",s:1},{a:"me",q:"メ",t:"k",s:1},
+			{a:"mo",q:"も",t:"h",s:1},{a:"mo",q:"モ",t:"k",s:1},
+			{a:"ya",q:"や",t:"h",s:1},{a:"ya",q:"ヤ",t:"k",s:1},
+			{a:"yu",q:"ゆ",t:"h",s:1},{a:"yu",q:"ユ",t:"k",s:1},
+			{a:"yo",q:"よ",t:"h",s:1},{a:"yo",q:"ヨ",t:"k",s:1},
+			{a:"ga",q:"が",t:"h",d:1},{a:"ga",q:"ガ",t:"k",d:1},
+			{a:"gi",q:"ぎ",t:"h",d:1},{a:"gi",q:"ギ",t:"k",d:1},
+			{a:"gu",q:"ぐ",t:"h",d:1},{a:"gu",q:"グ",t:"k",d:1},
+			{a:"ge",q:"げ",t:"h",d:1},{a:"ge",q:"ゲ",t:"k",d:1},
+			{a:"go",q:"ご",t:"h",d:1},{a:"go",q:"ゴ",t:"k",d:1},
+			{a:"za",q:"ざ",t:"h",d:1},{a:"za",q:"ザ",t:"k",d:1},
+			{a:"ji",q:"じ",t:"h",d:1},{a:"ji",q:"ジ",t:"k",d:1},
+			{a:"zu",q:"ず",t:"h",d:1},{a:"zu",q:"ズ",t:"k",d:1},
+			{a:"ze",q:"ぜ",t:"h",d:1},{a:"ze",q:"ゼ",t:"k",d:1},
+			{a:"zo",q:"ぞ",t:"h",d:1},{a:"zo",q:"ゾ",t:"k",d:1},
+			{a:"da",q:"だ",t:"h",d:1},{a:"da",q:"ダ",t:"k",d:1},
+			{a:"ji",q:"ぢ",t:"h",d:1},{a:"ji",q:"ヂ",t:"k",d:1},
+			{a:"zu",q:"づ",t:"h",d:1},{a:"zu",q:"ヅ",t:"k",d:1},
+			{a:"de",q:"で",t:"h",d:1},{a:"de",q:"デ",t:"k",d:1},
+			{a:"do",q:"ど",t:"h",d:1},{a:"do",q:"ド",t:"k",d:1},
+			{a:"ba",q:"ば",t:"h",d:1},{a:"ba",q:"バ",t:"k",d:1},
+			{a:"bi",q:"び",t:"h",d:1},{a:"bi",q:"ビ",t:"k",d:1},
+			{a:"bu",q:"ぶ",t:"h",d:1},{a:"bu",q:"ブ",t:"k",d:1},
+			{a:"be",q:"べ",t:"h",d:1},{a:"be",q:"ベ",t:"k",d:1},
+			{a:"bo",q:"ぼ",t:"h",d:1},{a:"bo",q:"ボ",t:"k",d:1},
+			{a:"pa",q:"ぱ",t:"h",d:1},{a:"pa",q:"パ",t:"k",d:1},
+			{a:"pi",q:"ぴ",t:"h",d:1},{a:"pi",q:"ピ",t:"k",d:1},
+			{a:"pu",q:"ぷ",t:"h",d:1},{a:"pu",q:"プ",t:"k",d:1},
+			{a:"pe",q:"ぺ",t:"h",d:1},{a:"pe",q:"ペ",t:"k",d:1},
+			{a:"po",q:"ぽ",t:"h",d:1},{a:"po",q:"ポ",t:"k",d:1},
+			{a:"kya",q:"きゃ",t:"h",y:1},{a:"kya",q:"キャ",t:"k",y:1},
+			{a:"kyu",q:"きゅ",t:"h",y:1},{a:"kyu",q:"キュ",t:"k",y:1},
+			{a:"kyo",q:"きょ",t:"h",y:1},{a:"kyo",q:"キョ",t:"k",y:1},
+			{a:"sha",q:"しゃ",t:"h",y:1},{a:"sha",q:"シャ",t:"k",y:1},
+			{a:"shu",q:"しゅ",t:"h",y:1},{a:"shu",q:"シュ",t:"k",y:1},
+			{a:"sho",q:"しょ",t:"h",y:1},{a:"sho",q:"ショ",t:"k",y:1},
+			{a:"cha",q:"ちゃ",t:"h",y:1},{a:"cha",q:"チャ",t:"k",y:1},
+			{a:"chu",q:"ちゅ",t:"h",y:1},{a:"chu",q:"チュ",t:"k",y:1},
+			{a:"cho",q:"ちょ",t:"h",y:1},{a:"cho",q:"チョ",t:"k",y:1},
+			{a:"nya",q:"にゃ",t:"h",y:1},{a:"nya",q:"ニャ",t:"k",y:1},
+			{a:"nyu",q:"にゅ",t:"h",y:1},{a:"nyu",q:"ニュ",t:"k",y:1},
+			{a:"nyo",q:"にょ",t:"h",y:1},{a:"nyo",q:"ニョ",t:"k",y:1},
+			{a:"hya",q:"ひゃ",t:"h",y:1},{a:"hya",q:"ヒャ",t:"k",y:1},
+			{a:"hyu",q:"ひゅ",t:"h",y:1},{a:"hyu",q:"ヒュ",t:"k",y:1},
+			{a:"hyo",q:"ひょ",t:"h",y:1},{a:"hyo",q:"ヒョ",t:"k",y:1},
+			{a:"mya",q:"みゃ",t:"h",y:1},{a:"mya",q:"ミャ",t:"k",y:1},
+			{a:"myu",q:"みゅ",t:"h",y:1},{a:"myu",q:"ミュ",t:"k",y:1},
+			{a:"myo",q:"みょ",t:"h",y:1},{a:"myo",q:"ミョ",t:"k",y:1},
+			{a:"rya",q:"りゃ",t:"h",y:1},{a:"rya",q:"リャ",t:"k",y:1},
+			{a:"ryu",q:"りゅ",t:"h",y:1},{a:"ryu",q:"リュ",t:"k",y:1},
+			{a:"ryo",q:"りょ",t:"h",y:1},{a:"ryo",q:"リョ",t:"k",y:1},
+			{a:"gya",q:"ぎゃ",t:"h",y:1,d:1},{a:"gya",q:"ギャ",t:"k",y:1,d:1},
+			{a:"gyu",q:"ぎゅ",t:"h",y:1,d:1},{a:"gyu",q:"ギュ",t:"k",y:1,d:1},
+			{a:"gyo",q:"ぎょ",t:"h",y:1,d:1},{a:"gyo",q:"ギョ",t:"k",y:1,d:1},
+			{a:"ja",q:"じゃ",t:"h",y:1,d:1},{a:"ja",q:"ジャ",t:"k",y:1,d:1},
+			{a:"ju",q:"じゅ",t:"h",y:1,d:1},{a:"ju",q:"ジュ",t:"k",y:1,d:1},
+			{a:"jo",q:"じょ",t:"h",y:1,d:1},{a:"jo",q:"ジョ",t:"k",y:1,d:1},
+			{a:"bya",q:"びゃ",t:"h",y:1,d:1},{a:"bya",q:"ビャ",t:"k",y:1,d:1},
+			{a:"byu",q:"びゅ",t:"h",y:1,d:1},{a:"byu",q:"ビュ",t:"k",y:1,d:1},
+			{a:"byo",q:"びょ",t:"h",y:1,d:1},{a:"byo",q:"ビョ",t:"k",y:1,d:1},
+			{a:"pya",q:"ぴゃ",t:"h",y:1,d:1},{a:"pya",q:"ピャ",t:"k",y:1,d:1},
+			{a:"pyu",q:"ぴゅ",t:"h",y:1,d:1},{a:"pyu",q:"ピュ",t:"k",y:1,d:1},
+			{a:"pyo",q:"ぴょ",t:"h",y:1,d:1},{a:"pyo",q:"ピョ",t:"k",y:1,d:1}
+		];
+		
+		$(function() {
+			new Vue({
+				el: "#app",
+				template: "#main",
+				data: {
+					master: kana,
+					list: [],
+					current: {},
+					attempts: 0,
+					iswrong: false,
+					answer: ""
+				},
+				mounted: function() {
+					this.pick();
+				},
+				methods: {
+					pick: function() {
+						this.attempt = 0;
+						if (!this.list.length) {
+							this.list = JSON.parse(JSON.stringify(this.master));
+						}
+						this.current = this.list[Math.floor(Math.random()*this.list.length)];
+					},
+					check: function(e) {
+						e.preventDefault();
+						
+						//restart list if empty
+						if (!this.list.length)
+							return this.pick();
+							
+						var answer = this.answer.toLowerCase();
+							
+						//dont penalize for blank entry
+						if (!answer)
+							return;
+							
+						this.iswrong = false;
+						if (answer === this.current.a) {
+							if (this.attempt === 0) {
+								var idx = this.list.indexOf(this.current);
+								if (idx !== -1)
+									this.list.splice(idx, 1);
+							}
+							
+							this.answer = "";
+							$("[name=answer]", this.$el).focus();
+							
+							if (this.list.length) {
+								this.pick();
+							} else {
+								this.current = {q: ":)"};
+							}
+						} else {
+							this.iswrong = true;							
+							if (++this.attempt > 2) {
+								this.answer = this.current.a;
+							}
+						}						
+					}
+				}
+			});
+		});
+	</script>
+	<style>
+		h1 {font-size: 10em;}
+		.wrong {border-color: #f00 !important;}
+	</style>
+	<script id="main" type="text/x-vue-template">
+		<div>
+			<h1 class="p-0 text-center">{{current.q}}</h1>
+			<div class="row">
+				<div class="col col-9 mx-auto py-1 px-2">
+					<form v-on:submit="check">
+						<div class="input-group">
+							<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" v-model.trim="answer" />
+							<div class="input-group-append">
+								<button class="btn btn-primary" :class="{'btn-danger': iswrong}" type="submit">Go</button> 
+							</div>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+	</script>
+</head>
+<body>
+	<div id="app"></div>
+</body>
+</html>
