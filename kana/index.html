@@ -5,6 +5,7 @@
 	<meta name="viewport" content="width=device-width">
 	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 	<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+	<script src="https://unpkg.com/popper.js/dist/umd/popper.min.js"></script>
 	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">	
 	<script>
 		//s: seion; d: dakuon; y: yoon
@@ -117,12 +118,56 @@
 					finished: [],
 					total: 0,
 					current: {},
+					fragment: {},
 					attempts: 0,
 					iswrong: false,
 					answer: ""
 				},
 				mounted: function() {
 					this.pick();
+					
+					var self = this,
+						popper;
+
+					function show(el) {
+						if (!el || el.tagName !== "SPAN")
+							return;
+						
+						if (!popper) {
+							popper = new Popper(el, $("div.popper", self.$el), {
+								placement: 'top',
+								modifiers: {arrow:{element:'.popper__arrow'}}
+							});
+						} else if (el === popper.reference) {
+							return;
+						}
+						
+						var idx = $(el).data("idx");
+						self.fragment = self.finished[idx];
+
+						$(popper.popper).addClass("show");
+						popper.reference = el;
+						popper.update();
+					}
+						
+					$(this.$el).on({
+						touchstart: function(e) {
+							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
+								el = document.elementFromPoint(touch.pageX, touch.pageY);
+							show(el);
+						},
+						touchend: function(e) {
+							if (popper) {
+								popper.reference = null;
+								$(popper.popper).removeClass("show");
+							}
+						},
+						touchmove: function(e) {
+							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
+								el = document.elementFromPoint(touch.pageX, touch.pageY);
+							show(el);
+						}
+					}, "div.progressbar");
 				},
 				computed: {
 					fragmentwidth: function() {
@@ -221,6 +266,83 @@
 		.progressbar .missed {
 			background-color: #ff8e8e;
 		}
+		.popper {
+			position: absolute;
+			background: #FFC107;
+			color: black;
+			width: 100px;
+			border-radius: 3px;
+			box-shadow: 0 0 2px rgba(0,0,0,0.5);
+			padding: 10px;
+			text-align: center;
+			display: none;
+			z-index: 4;
+		}
+		.popper.show {
+			display: block;
+		}
+		.popper .popper__arrow {
+			width: 0;
+			height: 0;
+			border-style: solid;
+			position: absolute;
+			margin: 5px;
+		}
+		.popper .popper__arrow {
+			border-color: #FFC107;
+		}
+		.popper[x-placement^="top"] {
+			margin-bottom: 5px;
+		}
+		.popper[x-placement^="top"] .popper__arrow {
+			border-width: 5px 5px 0 5px;
+			border-left-color: transparent;
+			border-right-color: transparent;
+			border-bottom-color: transparent;
+			bottom: -5px;
+			left: calc(50% - 5px);
+			margin-top: 0;
+			margin-bottom: 0;
+		}
+		.popper[x-placement^="bottom"] {
+			margin-top: 5px;
+		}
+		.popper[x-placement^="bottom"] .popper__arrow {
+			border-width: 0 5px 5px 5px;
+			border-left-color: transparent;
+			border-right-color: transparent;
+			border-top-color: transparent;
+			top: -5px;
+			left: calc(50% - 5px);
+			margin-top: 0;
+			margin-bottom: 0;
+		}
+		.popper[x-placement^="right"] {
+			margin-left: 5px;
+		}
+		.popper[x-placement^="right"] .popper__arrow {
+			border-width: 5px 5px 5px 0;
+			border-left-color: transparent;
+			border-top-color: transparent;
+			border-bottom-color: transparent;
+			left: -5px;
+			top: calc(50% - 5px);
+			margin-left: 0;
+			margin-right: 0;
+		}
+		.popper[x-placement^="left"] {
+			margin-right: 5px;
+		}
+		.popper[x-placement^="left"] .popper__arrow {
+			border-width: 5px 0 5px 5px;
+			border-top-color: transparent;
+			border-right-color: transparent;
+			border-bottom-color: transparent;
+			right: -5px;
+			top: calc(50% - 5px);
+			margin-left: 0;
+			margin-right: 0;
+		}
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
@@ -242,7 +364,7 @@
 			</div>
 			<div v-if="this.total" class="row">
 				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center progressbar">
-					<span v-for="item in finished" :style="{width: fragmentwidth}" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
+					<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
 					<label class="m-0 pl-2 ml-auto small">{{progress}}%</label>
 				</div>
 			</div>
@@ -251,6 +373,10 @@
 					<h3 class="my-2">Needs Work:</h3>
 					<p v-for="item in worklist">{{item.q}} - {{item.successes}} / {{item.attempts}}</p>
 				</div>
+			</div>
+			<div class="popper" role="tooltip">
+				{{fragment.q}} - {{fragment.successes}} / {{fragment.attempts}}
+				<div class="popper__arrow"></div>
 			</div>
 		</div>
 	</script>
