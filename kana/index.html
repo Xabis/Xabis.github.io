@@ -114,6 +114,8 @@
 				data: {
 					master: kana,
 					list: [],
+					finished: [],
+					total: 0,
 					current: {},
 					attempts: 0,
 					iswrong: false,
@@ -122,13 +124,39 @@
 				mounted: function() {
 					this.pick();
 				},
+				computed: {
+					fragmentwidth: function() {
+						if (this.total)
+							return (100 / this.total) + "%";
+						return "0px";
+					},
+					progress: function() {
+						if (this.total && this.finished.length)
+							return (this.finished.length / this.total * 100).toFixed(2);
+						return 0;
+					},
+					worklist: function() {
+						return this.finished.filter(function(item) {
+							return item.attempts;
+						});
+					}
+				},
 				methods: {
 					pick: function() {
 						this.attempt = 0;
 						if (!this.list.length) {
-							this.list = JSON.parse(JSON.stringify(this.master));
+							this.reset();
 						}
 						this.current = this.list[Math.floor(Math.random()*this.list.length)];
+						if ("undefined" === typeof this.current.successes)
+							Vue.set(this.current, "successes", 0);
+						if ("undefined" === typeof this.current.attempts)
+							Vue.set(this.current, "attempts", 0);
+					},
+					reset: function() {
+						this.list = JSON.parse(JSON.stringify(this.master));
+						this.total = this.list.length;
+						this.finished.splice(0);
 					},
 					check: function(e) {
 						e.preventDefault();
@@ -145,7 +173,14 @@
 							
 						this.iswrong = false;
 						if (answer === this.current.a) {
+							//if this is the first time this node was completed, add to the finish pile for display
+							var fidx = this.finished.indexOf(this.current);
+							if (fidx === -1)
+								this.finished.push(this.current);
+								
+							//remove the item only if there were no misses for this viewing
 							if (this.attempt === 0) {
+								this.current.successes++;
 								var idx = this.list.indexOf(this.current);
 								if (idx !== -1)
 									this.list.splice(idx, 1);
@@ -157,14 +192,15 @@
 							if (this.list.length) {
 								this.pick();
 							} else {
-								this.current = {q: ":)"};
+								this.current = {q: ":)",finished: true};
 							}
 						} else {
-							this.iswrong = true;							
+							this.current.attempts++;
+							this.iswrong = true;
 							if (++this.attempt > 2) {
 								this.answer = this.current.a;
 							}
-						}						
+						}
 					}
 				}
 			});
@@ -173,6 +209,18 @@
 	<style>
 		h1 {font-size: 10em;}
 		.wrong {border-color: #f00 !important;}
+		.progressbar span {
+			height: 10px;
+		}
+		.progressbar .perfect {
+			background-color: #b9eab9;
+		}
+		.progressbar .pickup {
+			background-color: #fcff56;
+		}
+		.progressbar .missed {
+			background-color: #ff8e8e;
+		}
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
@@ -180,13 +228,28 @@
 			<div class="row">
 				<div class="col col-9 mx-auto py-1 px-2">
 					<form v-on:submit="check">
-						<div class="input-group">
+						<div v-if="current.finished" class="row">
+							<button class="btn btn-primary mx-auto" type="submit">Start Again</button> 
+						</div>
+						<div v-else class="input-group">
 							<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" v-model.trim="answer" />
 							<div class="input-group-append">
 								<button class="btn btn-primary" :class="{'btn-danger': iswrong}" type="submit">Go</button> 
 							</div>
 						</div>
 					</form>
+				</div>
+			</div>
+			<div v-if="this.total" class="row">
+				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center progressbar">
+					<span v-for="item in finished" :style="{width: fragmentwidth}" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
+					<label class="m-0 pl-2 ml-auto small">{{progress}}%</label>
+				</div>
+			</div>
+			<div v-if="current.finished && worklist.length" class="row">
+				<div class="col col-9 mx-auto">
+					<h3 class="my-2">Needs Work:</h3>
+					<p v-for="item in worklist">{{item.q}} - {{item.successes}} / {{item.attempts}}</p>
 				</div>
 			</div>
 		</div>
