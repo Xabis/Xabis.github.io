@@ -133,7 +133,8 @@
 					iswrong: false,
 					answer: "",
 					drawmode: true,
-					drawtouches: [],
+					drawpoints: {},
+					mousedown: false,
 					isrevealed: false
 				},
 				mounted: function() {
@@ -224,7 +225,6 @@
 					pick: function() {
 						this.attempt = 0;
 						this.isrevealed = false;
-						this.erase();
 
 						if (!this.list.length) {
 							this.reset();
@@ -234,6 +234,11 @@
 							Vue.set(this.current, "successes", 0);
 						if ("undefined" === typeof this.current.attempts)
 							Vue.set(this.current, "attempts", 0);
+
+						//ensure canvas is present
+						Vue.nextTick().then(function() {
+							this.erase();
+						}.bind(this));
 					},
 					reset: function() {
 						this.list = JSON.parse(JSON.stringify(this.master));
@@ -244,6 +249,7 @@
 									temp = item.a;
 								item.a = item.q;
 								item.q = temp;
+								item.flip = true;
 							}
 						}
 						this.total = this.list.length;
@@ -313,98 +319,100 @@
 					},
 					touchstart: function(e) {
 						e.preventDefault();
-						
-						var el = $("canvas", this.$el)[0],
-							ctx = el.getContext("2d"),
-							touches = e.changedTouches,
-							rect = el.getBoundingClientRect();
-						
+						var touches = e.changedTouches;
 						for (var i = 0; i < touches.length; i++) {
-							var touch = touches[i],
-								x = touch.pageX - rect.left,
-								y = touch.pageY - rect.top;
-							
-							this.drawtouches.push({
-								identifier: touch.identifier,
-								pageX: x,
-								pageY: y
-							});
-							ctx.beginPath();
-							ctx.arc(x, y, 4, 0, 2 * Math.PI, false);
-							ctx.fillStyle = "#000";
-							ctx.fill();
+							var touch = touches[i];
+							this.drawstart(touch.identifier, touch.pageX, touch.pageY);
 						}
 					},
-					findtouch(id) {
-						for (var i = 0; i < this.drawtouches.length; i++) {
-							if (id === this.drawtouches[i].identifier)
-								return i;
+					mousestart: function(e) {
+						if (e.button === 0) {
+							this.mousedown = true;
+							this.drawstart("m", e.pageX, e.pageY);
 						}
-						return -1;
+					},
+					drawstart: function(id, x, y) {
+						var el = $("canvas", this.$el)[0],
+							ctx = el.getContext("2d"),
+							rect = el.getBoundingClientRect();
+							
+						x -= rect.left;
+						y -= rect.top;
+							
+						this.drawpoints[id] = { x: x, y: y };
+						
+						ctx.beginPath();
+						ctx.arc(x, y, 4, 0, 2 * Math.PI, false);
+						ctx.fillStyle = "#000";
+						ctx.fill();
 					},
 					touchmove: function(e) {
 						e.preventDefault();
-						
+						var touches = e.changedTouches;
+						for (var i = 0; i < touches.length; i++) {
+							var touch = touches[i];
+							this.drawmove(touch.identifier, touch.pageX, touch.pageY);
+						}
+					},
+					mousemove: function(e) {
+						this.mousedown && this.drawmove("m", e.pageX, e.pageY);
+					},
+					drawmove: function(id, x, y) {
 						var el = $("canvas", this.$el)[0],
 							ctx = el.getContext("2d"),
-							touches = e.changedTouches,
-							rect = el.getBoundingClientRect();
+							rect = el.getBoundingClientRect(),
+							prev = this.drawpoints[id];
+					
+						if (prev) {
+							x -= rect.left;
+							y -= rect.top;
 							
-						for (var i = 0; i < touches.length; i++) {
-							var touch = touches[i],
-								x = touch.pageX - rect.left,
-								y = touch.pageY - rect.top,
-								idx = this.findtouch(touch.identifier);
-								
-							if (idx >= 0) {
-								ctx.beginPath();
-								ctx.moveTo(this.drawtouches[idx].pageX, this.drawtouches[idx].pageY);
-								ctx.lineTo(x, y);
-								ctx.lineWidth = 4;
-								ctx.strokeStyle = "#000";
-								ctx.stroke();
-
-								this.drawtouches.splice(idx, 1, {
-									identifier: touch.identifier,
-									pageX: x,
-									pageY: y
-								});
-							}
+							ctx.beginPath();
+							ctx.moveTo(prev.x, prev.y);
+							ctx.lineTo(x, y);
+							ctx.lineWidth = 4;
+							ctx.strokeStyle = "#000";
+							ctx.stroke();
+							
+							prev.x = x;
+							prev.y = y;
 						}
 					},
 					touchend: function(e) {
 						e.preventDefault();
-
+						var touches = e.changedTouches;
+						for (var i = 0; i < touches.length; i++) {
+							var touch = touches[i];
+							this.drawend(touch.identifier, touch.pageX, touch.pageY);
+						}
+					},
+					mouseend: function(e) {
+						if (this.mousedown) {
+							this.mousedown = false;
+							this.drawend("m", e.pageX, e.pageY);
+						}
+					},
+					drawend: function(id, x, y) {
 						var el = $("canvas", this.$el)[0],
 							ctx = el.getContext("2d"),
-							touches = e.changedTouches,
-							rect = el.getBoundingClientRect();
+							rect = el.getBoundingClientRect(),
+							prev = this.drawpoints[id];
+					
+						if (prev) {
+							x -= rect.left;
+							y -= rect.top;
 							
-						for (var i = 0; i < touches.length; i++) {
-							var touch = touches[i],
-								x = touch.pageX - rect.left,
-								y = touch.pageY - rect.top,
-								idx = this.findtouch(touch.identifier);
-
-							if (idx >= 0) {
-								ctx.lineWidth = 4;
-								ctx.fillStyle = "#000";
-								ctx.beginPath();
-								ctx.moveTo(this.drawtouches[idx].pageX, this.drawtouches[idx].pageY);
-								ctx.lineTo(x, y);
-								ctx.fillRect(x - 4, y - 4, 8, 8);
-								this.drawtouches.splice(idx, 1);
-							}
+							ctx.lineWidth = 4;
+							ctx.fillStyle = "#000";
+							ctx.beginPath();
+							ctx.moveTo(prev.x, prev.y);
+							ctx.lineTo(x, y);
+							ctx.fillRect(x - 4, y - 4, 8, 8);
 						}
 					},
 					touchcancel: function(e) {
 						e.preventDefault();
-
-						var touches = e.changedTouches;
-						for (var i = 0; i < touches.length; i++) {
-							var idx = this.findtouch(touches[i].identifier);
-							this.drawtouches.splice(idx, 1);
-						}
+						this.drawpoints = {};
 					},
 					check: function(e) {
 						e.preventDefault && e.preventDefault();
@@ -608,7 +616,10 @@
 						v-on:touchstart="touchstart"
 						v-on:touchmove="touchmove"
 						v-on:touchcancel="touchcancel"
-						v-on:touchend="touchend">
+						v-on:touchend="touchend"
+						v-on:mousedown="mousestart"
+						v-on:mousemove="mousemove"
+						v-on:mouseup="mouseend">
 					</canvas>
 				</div>
 				<div v-if="current.finished" class="text-center py-1 px-2">
