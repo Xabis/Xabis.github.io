@@ -126,63 +126,39 @@
 					},
 					list: [],
 					finished: [],
+					history: [],
 					total: 0,
 					current: null,
 					fragment: {},
 					attempts: 0,
 					iswrong: false,
 					answer: "",
-					drawmode: true,
+					drawmode: localStorage.getItem("drawmode") === "true",
+					allowhiragana: localStorage.getItem("allowhiragana") !== "false",
+					allowkatakana: localStorage.getItem("allowkatakana") !== "false",
+					allowseion: localStorage.getItem("allowseion") !== "false",
+					allowdakuon: localStorage.getItem("allowdakuon") !== "false",
+					allowyoon: localStorage.getItem("allowyoon") !== "false",
+					threshold: parseFloat(localStorage.getItem("threshold") || 0),
+					thresholdin: localStorage.getItem("threshold") || "0",
 					drawpoints: {},
 					mousedown: false,
-					isrevealed: false
+					isrevealed: false,
+					popper: null,
+					error: ""
 				},
 				mounted: function() {
-					var self = this,
-						popper;
-
-					function show(el) {
-						if (!el || el.className.indexOf("fragment") === -1)
-							return;
-						
-						if (!popper) {
-							popper = new Popper(el, $("div.popper", self.$el), {
-								placement: 'top',
-								modifiers: {arrow:{element:'.popper__arrow'}}
-							});
-						} else if (el === popper.reference) {
-							return;
-						}
-						
-						var idx = $(el).data("idx");
-						self.fragment = self.finished[idx];
-
-						$(popper.popper).addClass("show");
-						popper.reference = el;
-						popper.update();
-					}
-						
-					$(this.$el).on({
-						touchstart: function(e) {
-							e.preventDefault();
-							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
-								el = document.elementFromPoint(touch.pageX, touch.pageY);
-							show(el);
-						},
-						touchend: function(e) {
-							e.preventDefault();
-							if (popper) {
-								popper.reference = null;
-								$(popper.popper).removeClass("show");
+					var store = localStorage.getItem("history");
+					if (store) {
+						try {
+							var data = JSON.parse(store);
+							if (data instanceof Array) {
+								this.history = data;
 							}
-						},
-						touchmove: function(e) {
-							e.preventDefault();
-							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
-								el = document.elementFromPoint(touch.pageX, touch.pageY);
-							show(el);
+						} catch {
+							localStorage.removeItem("history");
 						}
-					}, "div.progressbar");
+					}
 				},
 				computed: {
 					fragmentwidth: function() {
@@ -219,6 +195,36 @@
 								elem.setAttribute("transform", "matrix("+scale+", 0, 0, "+scale+", "+c+","+c+")");
 							}
 						});
+					},
+					history: function() {
+						localStorage.setItem("history", JSON.stringify(this.history));
+					},
+					drawmode: function() {
+						localStorage.setItem("drawmode", this.drawmode);
+					},
+					allowhiragana: function() {
+						localStorage.setItem("allowhiragana", this.allowhiragana);
+					},
+					allowkatakana: function() {
+						localStorage.setItem("allowkatakana", this.allowkatakana);
+					},
+					allowseion: function() {
+						localStorage.setItem("allowseion", this.allowseion);
+					},
+					allowdakuon: function() {
+						localStorage.setItem("allowdakuon", this.allowdakuon);
+					},
+					allowyoon: function() {
+						localStorage.setItem("allowyoon", this.allowyoon);
+					},
+					thresholdin: function() {
+						var value = parseFloat(this.thresholdin);
+						if (!isNaN(value)) {
+							this.threshold = value;
+						}
+					},
+					threshold: function() {
+						localStorage.setItem("threshold", this.threshold);
 					}
 				},
 				methods: {
@@ -228,7 +234,14 @@
 
 						if (!this.list.length) {
 							this.reset();
+							
+							//too many filters applied
+							if (!this.list.length) {
+								this.error = "No items to test. Try removing filters";
+								return;
+							}
 						}
+						this.error = "";
 						this.current = this.list[Math.floor(Math.random()*this.list.length)];
 						if ("undefined" === typeof this.current.successes)
 							Vue.set(this.current, "successes", 0);
@@ -241,9 +254,49 @@
 						}.bind(this));
 					},
 					reset: function() {
-						this.list = JSON.parse(JSON.stringify(this.master));
+						//clone the database
+						var clone = JSON.parse(JSON.stringify(this.master)),
+							find = function(needle) {
+								var len = this.history.length;
+								for (var i = 0; i < len; i++) {
+									var item = this.history[i];
+									if (item.flip && item.a === needle.q && item.q === needle.a) {
+										return item;
+									} else if (item.q === needle.q && item.a === needle.a) {
+										return item;
+									}
+								}
+								return null;
+							}.bind(this);
+						
+						//Apply filters
+						this.list = clone.filter(function(item) {
+							if (item.t === "h" && !this.allowhiragana)
+								return false;
+							if (item.t === "k" && !this.allowkatakana)
+								return false;
+							if (item.s && !this.allowseion)
+								return false;
+							if (item.d && !this.allowdakuon)
+								return false;
+							if (item.y && !this.allowyoon)
+								return false;
+							if (this.threshold > 0) {
+								var hist = find(item);
+								if (!hist)
+									return false;
+									
+								if (hist.attempts) {
+									var score = hist.successes / hist.attempts;
+									if (score < this.threshold)
+										return false;
+								}
+							}
+							return true;
+						}.bind(this));
+
+						//reverse question <-> answer if in draw mode
 						if (this.drawmode) {
-							//reverse question <-> answer
 							for (var i = 0; i < this.list.length; i++) {
 								var item = this.list[i],
 									temp = item.a;
@@ -260,9 +313,6 @@
 						this.finished.splice(0);
 						this.total = 0;
 						this.current = null;
-					},
-					toggledrawmode: function() {
-						this.drawmode = !this.drawmode;
 					},
 					reveal: function() {
 						this.isrevealed = !this.isrevealed;
@@ -295,6 +345,71 @@
 							
 						}
 					},
+					track: function() {
+						if (!this.current)
+							return;
+						
+						var fidx = -1;
+							len = this.history.length;
+						for (var i = 0; i < len; i++) {
+							if (this.history[i].q === this.current.q && this.history[i].a === this.current.a) {
+								fidx = i;
+								break;
+							}
+						}
+						
+						if (fidx === -1) {
+							this.history.push(this.current);
+						} else {
+							this.history[fidx].attempts += this.current.attempts;
+							this.history[fidx].successes += this.current.successes;
+						}
+					},
+					check: function(e) {
+						e.preventDefault && e.preventDefault();
+						
+						//restart list if empty
+						if (!this.list.length)
+							return this.pick();
+							
+						var answer = this.answer.toLowerCase();
+							
+						//dont penalize for blank entry
+						if (!answer)
+							return;
+							
+						this.iswrong = false;
+						if (answer === this.current.a) {
+							//if this is the first time this node was completed, add to the finish pile for display
+							var fidx = this.finished.indexOf(this.current);
+							if (fidx === -1)
+								this.finished.push(this.current);
+								
+							//remove the item only if there were no misses for this viewing
+							if (this.attempt === 0) {
+								this.current.successes++;
+								this.track();
+								var idx = this.list.indexOf(this.current);
+								if (idx !== -1)
+									this.list.splice(idx, 1);
+							}
+							
+							this.answer = "";
+							$("[name=answer]", this.$el).focus();
+							
+							if (this.list.length) {
+								this.pick();
+							} else {
+								this.current = {q: ":)", a:":)", finished: true};
+							}
+						} else {
+							this.current.attempts++;
+							this.iswrong = true;
+							if (++this.attempt > 2) {
+								this.answer = this.current.a;
+							}
+						}
+					},				
 					drawcorrect: function() {
 						//add to the finish pile for display
 						var fidx = this.finished.indexOf(this.current);
@@ -303,6 +418,7 @@
 							
 						//remove the item from future questions
 						this.current.successes++;
+						this.track();
 						var idx = this.list.indexOf(this.current);
 						if (idx !== -1)
 							this.list.splice(idx, 1);
@@ -317,9 +433,11 @@
 						this.current.attempts++;
 						this.pick();
 					},
+					
+					//Drawing Handlers
 					touchstart: function(e) {
 						e.preventDefault();
-						var touches = e.changedTouches;
+						var touches = e.touches || e.changedTouches;
 						for (var i = 0; i < touches.length; i++) {
 							var touch = touches[i];
 							this.drawstart(touch.identifier, touch.pageX, touch.pageY);
@@ -348,7 +466,7 @@
 					},
 					touchmove: function(e) {
 						e.preventDefault();
-						var touches = e.changedTouches;
+						var touches = e.touches || e.changedTouches;
 						for (var i = 0; i < touches.length; i++) {
 							var touch = touches[i];
 							this.drawmove(touch.identifier, touch.pageX, touch.pageY);
@@ -380,7 +498,7 @@
 					},
 					touchend: function(e) {
 						e.preventDefault();
-						var touches = e.changedTouches;
+						var touches = e.touches || e.changedTouches;
 						for (var i = 0; i < touches.length; i++) {
 							var touch = touches[i];
 							this.drawend(touch.identifier, touch.pageX, touch.pageY);
@@ -414,48 +532,45 @@
 						e.preventDefault();
 						this.drawpoints = {};
 					},
-					check: function(e) {
-						e.preventDefault && e.preventDefault();
-						
-						//restart list if empty
-						if (!this.list.length)
-							return this.pick();
-							
-						var answer = this.answer.toLowerCase();
-							
-						//dont penalize for blank entry
-						if (!answer)
+					
+					//Toop tip handlers
+					tipshow: function(el) {
+						if (!el || el.className.indexOf("fragment") === -1)
 							return;
-							
-						this.iswrong = false;
-						if (answer === this.current.a) {
-							//if this is the first time this node was completed, add to the finish pile for display
-							var fidx = this.finished.indexOf(this.current);
-							if (fidx === -1)
-								this.finished.push(this.current);
-								
-							//remove the item only if there were no misses for this viewing
-							if (this.attempt === 0) {
-								this.current.successes++;
-								var idx = this.list.indexOf(this.current);
-								if (idx !== -1)
-									this.list.splice(idx, 1);
-							}
-							
-							this.answer = "";
-							$("[name=answer]", this.$el).focus();
-							
-							if (this.list.length) {
-								this.pick();
-							} else {
-								this.current = {q: ":)", a:":)", finished: true};
-							}
-						} else {
-							this.current.attempts++;
-							this.iswrong = true;
-							if (++this.attempt > 2) {
-								this.answer = this.current.a;
-							}
+						
+						if (!this.popper) {
+							this.popper = new Popper(el, $("div.popper", this.$el), {
+								placement: 'top',
+								modifiers: {arrow:{element:'.popper__arrow'}}
+							});
+						} else if (el === this.popper.reference) {
+							return;
+						}
+						
+						var idx = $(el).data("idx");
+						this.fragment = this.finished[idx];
+
+						$(this.popper.popper).addClass("show");
+						this.popper.reference = el;
+						this.popper.update();
+					},
+					tipstart: function(e) {
+						e.preventDefault();
+						var touch = e.touches[0] || e.changedTouches[0],
+							el = document.elementFromPoint(touch.pageX, touch.pageY);
+						this.tipshow(el);
+					},
+					tipmove: function(e) {
+						e.preventDefault();
+						var touch = e.touches[0] || e.changedTouches[0],
+							el = document.elementFromPoint(touch.pageX, touch.pageY);
+						this.tipshow(el);
+					},
+					tipend: function(e) {
+						e.preventDefault();
+						if (this.popper) {
+							this.popper.reference = null;
+							$(this.popper.popper).removeClass("show");
 						}
 					}
 				}
@@ -463,7 +578,7 @@
 		});
 	</script>
 	<style>
-		h1 {font-size: 10em;}
+		.glyph {font-size: 10em;}
 		.wrong {border-color: #f00 !important;}
 		.progressbar {
 			border-bottom: solid 2px #ccc;
@@ -484,7 +599,7 @@
 			position: absolute;
 			background: #FFC107;
 			color: black;
-			width: 100px;
+			width: 120px;
 			border-radius: 3px;
 			box-shadow: 0 0 2px rgba(0,0,0,0.5);
 			padding: 10px;
@@ -557,18 +672,10 @@
 			margin-left: 0;
 			margin-right: 0;
 		}
-		
 		.drawarea {
 			display: flex;
 			margin: auto;
 			justify-content: center;
-		}
-		.drawarea h1 {
-			width: 256px;
-			height: 256px;
-		}
-		.drawarea h1 span {
-			vertical-align: middle;
 		}
 		canvas {
 			border: solid 1px #000;
@@ -593,18 +700,130 @@
 			alignment-baseline:central;
 			fill:#000;
 		}
+		.onoffswitch {
+			position: relative; width: 40px;
+			-webkit-user-select:none; -moz-user-select:none; -ms-user-select: none;
+		}
+		.onoffswitch-checkbox {
+			display: none;
+		}
+		.onoffswitch-label {
+			display: block; overflow: hidden; cursor: pointer;
+			height: 20px; padding: 0; margin: 0; line-height: 20px;
+			border: 2px solid #E3E3E3; border-radius: 20px;
+			background-color: #FFFFFF;
+			transition: background-color 0.3s ease-in;
+		}
+		.onoffswitch-label:before {
+			content: "";
+			display: block; width: 20px; margin: 0px;
+			background: #FFFFFF;
+			position: absolute; top: 0; bottom: 0;
+			right: 18px;
+			border: 2px solid #E3E3E3; border-radius: 20px;
+			transition: all 0.3s ease-in 0s; 
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label {
+			background-color: #4693EB;
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label, .onoffswitch-checkbox:checked + .onoffswitch-label:before {
+			border-color: #4693EB;
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label:before {
+			right: 0px;
+		}
+		input.error,
+		input.error:focus {
+			border-color: #f00;
+			background: #f7b2b2;
+		}
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
-			<div v-if="!current" class="row">
-				<div class="col text-center p-3">
-					<h1 class="h1">Kana Tester</h1>
-					<button type="button" class="btn btn-secondary" v-on:click="toggledrawmode">
-						Mode: <span v-if="drawmode">Draw</span><span v-else>Type</span>
-					</button>
-					<button type="button" class="btn btn-primary" v-on:click="pick">
-						Start
-					</button>
+			<div v-if="!current">
+				<h1 class="text-center mb-4">JTester</h1>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbdm">Test Mode</label>
+					<div class="col-5">
+						<div class="onoffswitch d-inline-block align-middle">
+							<input v-model="drawmode" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbdm">
+							<label class="onoffswitch-label" for="cbdm"></label>
+						</div>
+						<span class="align-middle ml-2" v-if="drawmode">Draw</span>
+						<span class="align-middle ml-2" v-else>Write</span>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2 mt-4">
+					<h3 class="col mb-0 text-center" for="cbts">Question Types</h3>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbth">Hiragana あ</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allowhiragana" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbth">
+							<label class="onoffswitch-label" for="cbth"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbtk">Katakana ア</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allowkatakana" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbtk">
+							<label class="onoffswitch-label" for="cbtk"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2 mt-4">
+					<h3 class="col mb-0 text-center" for="cbts">Kana Filters</h3>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">Basic Kana</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allowseion" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbts">
+							<label class="onoffswitch-label" for="cbts"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbtd">Dakuon</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allowdakuon" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbtd">
+							<label class="onoffswitch-label" for="cbtd"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbty">Yoon</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allowyoon" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbty">
+							<label class="onoffswitch-label" for="cbty"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2 mt-4">
+					<h3 class="col mb-0 text-center" for="cbts">Test History</h3>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">Score Threshold</label>
+					<div class="col-5">
+						<input v-model="thresholdin" type="text" class="form-control w-50" :class="{error: isNaN(parseFloat(thresholdin))}" />
+					</div>
+				</div>
+				<div class="row">
+					<div class="col text-center p-3">
+						<button type="button" class="btn btn-primary" v-on:click="pick">
+							Start
+						</button>
+					</div>
+				</div>
+				<div v-if="error" class="row">
+					<div class="col text-center p-3 h5">
+						{{error}}
+					</div>
 				</div>
 			</div>
 			<div v-else-if="drawmode">
@@ -640,7 +859,7 @@
 				</div>
 			</div>
 			<div v-else>
-				<h1 class="p-0 text-center">{{current.q}}</h1>
+				<h1 class="glyph p-0 text-center">{{current.q}}</h1>
 				<div class="row">
 					<div class="col col-9 mx-auto py-1 px-2">
 						<form v-on:submit="check">
@@ -660,7 +879,7 @@
 			</div>		
 			<div v-if="this.total" class="row">
 				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center">
-					<div class="d-flex flex-grow-1 pb-1 progressbar">
+					<div class="d-flex flex-grow-1 pb-1 progressbar" v-on:touchstart="tipstart" v-on:touchmove="tipmove" v-on:touchend="tipend" v-on:touchcancel="tipend">
 						<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" class="fragment" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
 					</div>
 					<label class="m-0 pl-2 small">{{progress}}%</label>
@@ -669,11 +888,11 @@
 			<div v-if="current && current.finished && worklist.length" class="row">
 				<div class="col col-9 mx-auto">
 					<h3 class="my-2">Needs Work:</h3>
-					<p v-for="item in worklist">{{item.q}}->{{item.a}} - {{item.successes}} / {{item.attempts}}</p>
+					<p v-for="item in worklist">{{item.q}}&#x2192;{{item.a}} - {{item.successes}} / {{item.attempts}}</p>
 				</div>
 			</div>
 			<div class="popper" role="tooltip">
-				{{fragment.q}} - {{fragment.successes}} / {{fragment.attempts}}
+				{{fragment.q}}&#x2192;{{fragment.a}} - {{fragment.successes}} / {{fragment.attempts}}
 				<div class="popper__arrow"></div>
 			</div>
 		</div>
