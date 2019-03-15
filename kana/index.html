@@ -2,7 +2,7 @@
 <html>
 <head>
 	<meta charset="utf-8" />
-	<meta name="viewport" content="width=device-width">
+	<meta name="viewport" content="width=device-width, maximum-scale=1.0">
 	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 	<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
 	<script src="https://unpkg.com/popper.js/dist/umd/popper.min.js"></script>
@@ -114,23 +114,34 @@
 				template: "#main",
 				data: {
 					master: kana,
+					types: {
+						h: {
+							name: "Hiragana",
+							abbr: "Hira"
+						},
+						k: {
+							name: "Katakana",
+							abbr: "Kata"
+						}
+					},
 					list: [],
 					finished: [],
 					total: 0,
-					current: {},
+					current: null,
 					fragment: {},
 					attempts: 0,
 					iswrong: false,
-					answer: ""
+					answer: "",
+					drawmode: true,
+					drawtouches: [],
+					isrevealed: false
 				},
 				mounted: function() {
-					this.pick();
-					
 					var self = this,
 						popper;
 
 					function show(el) {
-						if (!el || el.tagName !== "SPAN")
+						if (!el || el.className.indexOf("fragment") === -1)
 							return;
 						
 						if (!popper) {
@@ -152,17 +163,20 @@
 						
 					$(this.$el).on({
 						touchstart: function(e) {
+							e.preventDefault();
 							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
 								el = document.elementFromPoint(touch.pageX, touch.pageY);
 							show(el);
 						},
 						touchend: function(e) {
+							e.preventDefault();
 							if (popper) {
 								popper.reference = null;
 								$(popper.popper).removeClass("show");
 							}
 						},
 						touchmove: function(e) {
+							e.preventDefault();
 							var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0],
 								el = document.elementFromPoint(touch.pageX, touch.pageY);
 							show(el);
@@ -186,9 +200,32 @@
 						});
 					}
 				},
+				watch: {
+					current: function() {
+						if (!this.drawmode)
+							return;
+							
+						Vue.nextTick().then(function() {
+							//auto-fit the text into the svg area
+							var elem = $("svg > text", this.$el)[0];
+							if (elem) {
+								elem.removeAttribute("transform");
+								var bb = elem.getBBox();
+								var widthTransform = 256 / bb.width;
+								var heightTransform = 256 / bb.height;
+								var scale = widthTransform < heightTransform ? widthTransform : heightTransform;
+								var c = (1-scale)*128;
+								elem.setAttribute("transform", "matrix("+scale+", 0, 0, "+scale+", "+c+","+c+")");
+							}
+						});
+					}
+				},
 				methods: {
 					pick: function() {
 						this.attempt = 0;
+						this.isrevealed = false;
+						this.erase();
+
 						if (!this.list.length) {
 							this.reset();
 						}
@@ -200,11 +237,177 @@
 					},
 					reset: function() {
 						this.list = JSON.parse(JSON.stringify(this.master));
+						if (this.drawmode) {
+							//reverse question <-> answer
+							for (var i = 0; i < this.list.length; i++) {
+								var item = this.list[i],
+									temp = item.a;
+								item.a = item.q;
+								item.q = temp;
+							}
+						}
 						this.total = this.list.length;
 						this.finished.splice(0);
 					},
-					check: function(e) {
+					mainmenu: function() {
+						this.list.splice(0);
+						this.finished.splice(0);
+						this.total = 0;
+						this.current = null;
+					},
+					toggledrawmode: function() {
+						this.drawmode = !this.drawmode;
+					},
+					reveal: function() {
+						this.isrevealed = !this.isrevealed;
+					},
+					erase: function() {
+						if (!this.drawmode)
+							return;
+							
+						var elem = $("canvas", this.$el)[0];
+						if (elem) {
+							var ctx = elem.getContext("2d");
+							
+							ctx.clearRect(0, 0, elem.width, elem.height);
+							ctx.setLineDash([5, 3]);
+							
+							ctx.beginPath();
+							ctx.moveTo(0, 128);
+							ctx.lineTo(256, 128);
+							ctx.lineWidth = 1;
+							ctx.strokeStyle = "#ccc";
+							ctx.stroke();
+
+							ctx.beginPath();
+							ctx.moveTo(128, 0);
+							ctx.lineTo(128, 256);
+							ctx.lineWidth = 1;
+							ctx.strokeStyle = "#ccc";
+							ctx.stroke();
+							ctx.setLineDash([]);
+							
+						}
+					},
+					drawcorrect: function() {
+						//add to the finish pile for display
+						var fidx = this.finished.indexOf(this.current);
+						if (fidx === -1)
+							this.finished.push(this.current);
+							
+						//remove the item from future questions
+						this.current.successes++;
+						var idx = this.list.indexOf(this.current);
+						if (idx !== -1)
+							this.list.splice(idx, 1);
+											
+						if (this.list.length) {
+							this.pick();
+						} else {
+							this.current = {q: ":)", a:":)", finished: true};
+						}
+					},
+					drawincorrect: function() {
+						this.current.attempts++;
+						this.pick();
+					},
+					touchstart: function(e) {
 						e.preventDefault();
+						
+						var el = $("canvas", this.$el)[0],
+							ctx = el.getContext("2d"),
+							touches = e.changedTouches,
+							rect = el.getBoundingClientRect();
+						
+						for (var i = 0; i < touches.length; i++) {
+							var touch = touches[i],
+								x = touch.pageX - rect.left,
+								y = touch.pageY - rect.top;
+							
+							this.drawtouches.push({
+								identifier: touch.identifier,
+								pageX: x,
+								pageY: y
+							});
+							ctx.beginPath();
+							ctx.arc(x, y, 4, 0, 2 * Math.PI, false);
+							ctx.fillStyle = "#000";
+							ctx.fill();
+						}
+					},
+					findtouch(id) {
+						for (var i = 0; i < this.drawtouches.length; i++) {
+							if (id === this.drawtouches[i].identifier)
+								return i;
+						}
+						return -1;
+					},
+					touchmove: function(e) {
+						e.preventDefault();
+						
+						var el = $("canvas", this.$el)[0],
+							ctx = el.getContext("2d"),
+							touches = e.changedTouches,
+							rect = el.getBoundingClientRect();
+							
+						for (var i = 0; i < touches.length; i++) {
+							var touch = touches[i],
+								x = touch.pageX - rect.left,
+								y = touch.pageY - rect.top,
+								idx = this.findtouch(touch.identifier);
+								
+							if (idx >= 0) {
+								ctx.beginPath();
+								ctx.moveTo(this.drawtouches[idx].pageX, this.drawtouches[idx].pageY);
+								ctx.lineTo(x, y);
+								ctx.lineWidth = 4;
+								ctx.strokeStyle = "#000";
+								ctx.stroke();
+
+								this.drawtouches.splice(idx, 1, {
+									identifier: touch.identifier,
+									pageX: x,
+									pageY: y
+								});
+							}
+						}
+					},
+					touchend: function(e) {
+						e.preventDefault();
+
+						var el = $("canvas", this.$el)[0],
+							ctx = el.getContext("2d"),
+							touches = e.changedTouches,
+							rect = el.getBoundingClientRect();
+							
+						for (var i = 0; i < touches.length; i++) {
+							var touch = touches[i],
+								x = touch.pageX - rect.left,
+								y = touch.pageY - rect.top,
+								idx = this.findtouch(touch.identifier);
+
+							if (idx >= 0) {
+								ctx.lineWidth = 4;
+								ctx.fillStyle = "#000";
+								ctx.beginPath();
+								ctx.moveTo(this.drawtouches[idx].pageX, this.drawtouches[idx].pageY);
+								ctx.lineTo(x, y);
+								ctx.fillRect(x - 4, y - 4, 8, 8);
+								this.drawtouches.splice(idx, 1);
+							}
+						}
+					},
+					touchcancel: function(e) {
+						e.preventDefault();
+
+						var touches = e.changedTouches;
+						for (var i = 0; i < touches.length; i++) {
+							var idx = this.findtouch(touches[i].identifier);
+							this.drawtouches.splice(idx, 1);
+						}
+					},
+					check: function(e) {
+						e.preventDefault && e.preventDefault();
 						
 						//restart list if empty
 						if (!this.list.length)
@@ -237,7 +440,7 @@
 							if (this.list.length) {
 								this.pick();
 							} else {
-								this.current = {q: ":)",finished: true};
+								this.current = {q: ":)", a:":)", finished: true};
 							}
 						} else {
 							this.current.attempts++;
@@ -254,8 +457,11 @@
 	<style>
 		h1 {font-size: 10em;}
 		.wrong {border-color: #f00 !important;}
-		.progressbar span {
-			height: 10px;
+		.progressbar {
+			border-bottom: solid 2px #ccc;
+		}
+		.progressbar .fragment {
+			height: 20px;
 		}
 		.progressbar .perfect {
 			background-color: #b9eab9;
@@ -343,35 +549,116 @@
 			margin-left: 0;
 			margin-right: 0;
 		}
+		
+		.drawarea {
+			display: flex;
+			margin: auto;
+			justify-content: center;
+		}
+		.drawarea h1 {
+			width: 256px;
+			height: 256px;
+		}
+		.drawarea h1 span {
+			vertical-align: middle;
+		}
+		canvas {
+			border: solid 1px #000;
+			width: 256px;
+			height: 256px;
+			position: absolute;
+			background: #fff;
+			
+		}
+		.drawarea.reveal canvas {
+			background: rgba(255, 255, 255, .5);
+		}
+		svg {
+			height: 256px;
+			width: 256px;
+		}
+		text {
+			font-size:128px;
+			text-align:center;
+			text-anchor: middle;
+			dominant-baseline:central;
+			alignment-baseline:central;
+			fill:#000;
+		}
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
-			<h1 class="p-0 text-center">{{current.q}}</h1>
-			<div class="row">
-				<div class="col col-9 mx-auto py-1 px-2">
-					<form v-on:submit="check">
-						<div v-if="current.finished" class="row">
-							<button class="btn btn-primary mx-auto" type="submit">Start Again</button> 
-						</div>
-						<div v-else class="input-group">
-							<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" v-model.trim="answer" />
-							<div class="input-group-append">
-								<button class="btn btn-primary" :class="{'btn-danger': iswrong}" type="submit">Go</button> 
+			<div v-if="!current" class="row">
+				<div class="col text-center p-3">
+					<h1 class="h1">Kana Tester</h1>
+					<button type="button" class="btn btn-secondary" v-on:click="toggledrawmode">
+						Mode: <span v-if="drawmode">Draw</span><span v-else>Type</span>
+					</button>
+					<button type="button" class="btn btn-primary" v-on:click="pick">
+						Start
+					</button>
+				</div>
+			</div>
+			<div v-else-if="drawmode">
+				<div class="drawarea text-center m-3" :class="{reveal: isrevealed}">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" :class="{yoon: current.y}">
+						<text x="128" y="128">{{current.a}}</text>
+					</svg>
+					<canvas height="256" width="256" v-if="!current.finished"
+						v-on:touchstart="touchstart"
+						v-on:touchmove="touchmove"
+						v-on:touchcancel="touchcancel"
+						v-on:touchend="touchend">
+					</canvas>
+				</div>
+				<div v-if="current.finished" class="text-center py-1 px-2">
+					<button class="btn btn-primary" type="button" v-on:click="mainmenu">Main Menu</button> 
+					<button class="btn btn-primary" type="button" v-on:click="pick">Start Again</button> 
+				</div>
+				<div v-else class="row">
+					<div class="col col-9 mx-auto py-1 px-2 text-center h3"><span v-if="!current.finished">Draw: </span>{{current.q}} <span class="ml-2" v-if="current.t">({{this.types[current.t].abbr}})</span></div>
+				</div>
+				<div v-if="!current.finished" class="text-center py-1">
+					<button class="btn btn-secondary mx-1" type="button" v-on:click="reveal">
+						<span v-if="isrevealed">Hide</span>
+						<span v-else>Reveal</span>
+					</button>
+					<button class="btn btn-secondary mx-1" type="button" v-on:click="erase">Erase</button>
+					<button class="btn btn-primary mx-1" type="button" v-on:click="drawcorrect">Correct</button>
+					<button class="btn btn-danger mx-1" type="button" v-on:click="drawincorrect">Wrong</button>
+				</div>
+			</div>
+			<div v-else>
+				<h1 class="p-0 text-center">{{current.q}}</h1>
+				<div class="row">
+					<div class="col col-9 mx-auto py-1 px-2">
+						<form v-on:submit="check">
+							<div v-if="current.finished" class="text-center">
+								<button class="btn btn-primary" type="button" v-on:click="mainmenu">Main Menu</button> 
+								<button class="btn btn-primary" type="submit">Start Again</button> 
 							</div>
-						</div>
-					</form>
+							<div v-else class="input-group">
+								<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" v-model.trim="answer" />
+								<div class="input-group-append">
+									<button class="btn btn-primary" :class="{'btn-danger': iswrong}" type="submit">Go</button> 
+								</div>
+							</div>
+						</form>
+					</div>
 				</div>
-			</div>
+			</div>		
 			<div v-if="this.total" class="row">
-				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center progressbar">
-					<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
-					<label class="m-0 pl-2 ml-auto small">{{progress}}%</label>
+				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center">
+					<div class="d-flex flex-grow-1 pb-1 progressbar">
+						<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" class="fragment" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
+					</div>
+					<label class="m-0 pl-2 small">{{progress}}%</label>
 				</div>
 			</div>
-			<div v-if="current.finished && worklist.length" class="row">
+			<div v-if="current && current.finished && worklist.length" class="row">
 				<div class="col col-9 mx-auto">
 					<h3 class="my-2">Needs Work:</h3>
-					<p v-for="item in worklist">{{item.q}} - {{item.successes}} / {{item.attempts}}</p>
+					<p v-for="item in worklist">{{item.q}}->{{item.a}} - {{item.successes}} / {{item.attempts}}</p>
 				</div>
 			</div>
 			<div class="popper" role="tooltip">
