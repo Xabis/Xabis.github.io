@@ -130,7 +130,6 @@
 					total: 0,
 					current: null,
 					fragment: {},
-					attempts: 0,
 					iswrong: false,
 					answer: "",
 					drawmode: localStorage.getItem("drawmode") === "true",
@@ -174,7 +173,7 @@
 					},
 					worklist: function() {
 						return this.finished.filter(function(item) {
-							return item.attempts;
+							return item.incorrect;
 						});
 					}
 				},
@@ -232,6 +231,7 @@
 					pick: function() {
 						this.attempt = 0;
 						this.isrevealed = false;
+						this.error = "";
 
 						if (!this.list.length) {
 							this.reset();
@@ -242,12 +242,19 @@
 								return;
 							}
 						}
-						this.error = "";
-						this.current = this.list[Math.floor(Math.random()*this.list.length)];
-						if ("undefined" === typeof this.current.successes)
-							Vue.set(this.current, "successes", 0);
-						if ("undefined" === typeof this.current.attempts)
-							Vue.set(this.current, "attempts", 0);
+						
+						//pick next question, but dont allow reask the same question back to back
+						var pick = this.list[Math.floor(Math.random()*this.list.length)];
+						if (pick === this.current && this.list.length > 1)
+							return this.pick();
+						this.current = pick;
+						
+						if ("undefined" === typeof this.current.correct)
+							Vue.set(this.current, "correct", 0);
+						if ("undefined" === typeof this.current.incorrect)
+							Vue.set(this.current, "incorrect", 0);
+						if ("undefined" === typeof this.current.viewed)
+							Vue.set(this.current, "viewed", 0);
 
 						//ensure canvas is present
 						Vue.nextTick().then(function() {
@@ -286,10 +293,10 @@
 								var hist = find(item);
 								if (!hist)
 									return false;
-								if (!hist.attempts)
+								if (!hist.incorrect)
 									return false;
 									
-								var score = hist.successes / hist.attempts;
+								var score = hist.correct / hist.incorrect;
 								if (score < this.threshold)
 									return false;
 							}
@@ -362,8 +369,8 @@
 						if (fidx === -1) {
 							this.history.push(this.current);
 						} else {
-							this.history[fidx].attempts += this.current.attempts;
-							this.history[fidx].successes += this.current.successes;
+							this.history[fidx].incorrect += this.current.incorrect;
+							this.history[fidx].correct += this.current.correct;
 						}
 					},
 					check: function(e) {
@@ -388,13 +395,14 @@
 								
 							//remove the item only if there were no misses for this viewing
 							if (this.attempt === 0) {
-								this.current.successes++;
+								this.current.correct++;
 								this.track();
 								var idx = this.list.indexOf(this.current);
 								if (idx !== -1)
 									this.list.splice(idx, 1);
 							}
 							
+							this.current.viewed++;
 							this.answer = "";
 							$("[name=answer]", this.$el).focus();
 							
@@ -404,7 +412,7 @@
 								this.current = {q: ":)", a:":)", finished: true};
 							}
 						} else {
-							this.current.attempts++;
+							this.current.incorrect++;
 							this.iswrong = true;
 							if (++this.attempt > 2) {
 								this.answer = this.current.a;
@@ -418,7 +426,8 @@
 							this.finished.push(this.current);
 							
 						//remove the item from future questions
-						this.current.successes++;
+						this.current.correct++;
+						this.current.viewed++;
 						this.track();
 						var idx = this.list.indexOf(this.current);
 						if (idx !== -1)
@@ -431,7 +440,13 @@
 						}
 					},
 					drawincorrect: function() {
-						this.current.attempts++;
+						//add to the finish pile for display
+						var fidx = this.finished.indexOf(this.current);
+						if (fidx === -1)
+							this.finished.push(this.current);
+								
+						this.current.incorrect++;
+						this.current.viewed++;
 						this.pick();
 					},
 					togglehistory: function() {
@@ -589,9 +604,38 @@
 		.wrong {border-color: #f00 !important;}
 		.progressbar {
 			border-bottom: solid 2px #ccc;
+			height: 30px;
 		}
 		.progressbar .fragment {
-			height: 20px;
+			height: 100%;
+		}
+		.progressbar .fragment.selected {
+			outline: solid 2px #f00;
+			z-index: 1;
+			position: relative;
+		}
+		.progressbar .fragment.selected:after {
+			content: "";
+			width: 0; 
+			height: 0; 
+			border-left: 5px solid transparent;
+			border-right: 5px solid transparent;
+			border-bottom: 5px solid black;
+			left: 50%;
+			margin-left: -2.5px;
+			position: absolute;
+			bottom: 0%;
+			margin-bottom: -20px;
+		}
+		.progressbar .fragment.selected > .viewcount {
+			position: absolute;
+			bottom: 0%;
+			margin-bottom: -45px;
+			width: 100%;
+			white-space: nowrap;
+			display: flex;
+			align-items: center;
+			justify-content: center;
 		}
 		.progressbar .perfect {
 			background-color: #b9eab9;
@@ -744,6 +788,12 @@
 			border-color: #f00;
 			background: #f7b2b2;
 		}
+		
+		@media (max-width: 450px) {
+			.progressbar {
+				height: 50px;
+			}
+		}
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
@@ -760,11 +810,11 @@
 							</tr>
 						</thead>
 						<tbody>
-							<tr v-for="item in history" v-if="drawmode === !!item.flip && item.attempts !== 0">
+							<tr v-for="item in history" v-if="drawmode === !!item.flip && item.incorrect !== 0">
 								<td>{{item.q}}&#x2192;{{item.a}}</td>
-								<td>{{item.successes}}</td>
-								<td>{{item.attempts}}</td>
-								<td>{{(item.successes / item.attempts).toFixed(2)}}</td>
+								<td>{{item.correct}}</td>
+								<td>{{item.incorrect}}</td>
+								<td>{{(item.correct / item.incorrect).toFixed(2)}}</td>
 							</tr>
 						</tbody>
 					</table>
@@ -772,7 +822,7 @@
 				</div>
 				<div class="row">
 					<div class="col text-center p-3">
-						<button type="button" class="btn btn-primary" v-on:click="clearhistory">
+						<button v-if="history.length" type="button" class="btn btn-primary" v-on:click="clearhistory">
 							Clear History
 						</button>
 						<button type="button" class="btn btn-secondary" v-on:click="togglehistory">
@@ -912,7 +962,7 @@
 								<button class="btn btn-primary" type="submit">Start Again</button> 
 							</div>
 							<div v-else class="input-group">
-								<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" v-model.trim="answer" />
+								<input type="text" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" autocomplete="off" v-model.trim="answer" />
 								<div class="input-group-append">
 									<button class="btn btn-primary" :class="{'btn-danger': iswrong}" type="submit">Go</button> 
 								</div>
@@ -923,8 +973,10 @@
 			</div>		
 			<div v-if="this.total" class="row">
 				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center">
-					<div class="d-flex flex-grow-1 pb-1 progressbar" v-on:touchstart="tipstart" v-on:touchmove="tipmove" v-on:touchend="tipend" v-on:touchcancel="tipend">
-						<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" class="fragment" :class="{perfect: !item.attempts, pickup: item.attempts > 0 && item.attempts < 3, missed: item.attempts > 2}" :title="item.q+' Correct: '+item.successes+' / Incorrect: '+item.attempts"></span>
+					<div class="d-flex flex-grow-1 pb-2 progressbar" v-on:touchstart="tipstart" v-on:touchmove="tipmove" v-on:touchend="tipend" v-on:touchcancel="tipend">
+						<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" class="fragment" :class="{perfect: !item.incorrect, pickup: item.incorrect > 0 && item.incorrect < 3, missed: item.incorrect > 2, selected: current === item}" :title="item.q+' Correct: '+item.correct+' / Incorrect: '+item.incorrect">
+							<span v-if="current === item" class="viewcount">Attempt #{{item.viewed+1}}</span>
+						</span>
 					</div>
 					<label class="m-0 pl-2 small">{{progress}}%</label>
 				</div>
@@ -932,11 +984,11 @@
 			<div v-if="current && current.finished && worklist.length" class="row">
 				<div class="col col-9 mx-auto">
 					<h3 class="my-2">Needs Work:</h3>
-					<p v-for="item in worklist">{{item.q}}&#x2192;{{item.a}} - {{item.successes}} / {{item.attempts}}</p>
+					<p v-for="item in worklist">{{item.q}}&#x2192;{{item.a}} - {{item.correct}} / {{item.incorrect}}</p>
 				</div>
 			</div>
 			<div class="popper" role="tooltip">
-				{{fragment.q}}&#x2192;{{fragment.a}} - {{fragment.successes}} / {{fragment.attempts}}
+				{{fragment.q}}&#x2192;{{fragment.a}} - {{fragment.correct}} / {{fragment.incorrect}}
 				<div class="popper__arrow"></div>
 			</div>
 		</div>
