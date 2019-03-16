@@ -145,7 +145,8 @@
 					mousedown: false,
 					isrevealed: false,
 					popper: null,
-					error: ""
+					error: "",
+					viewhistory: false
 				},
 				mounted: function() {
 					var store = localStorage.getItem("history");
@@ -260,9 +261,9 @@
 								var len = this.history.length;
 								for (var i = 0; i < len; i++) {
 									var item = this.history[i];
-									if (item.flip && item.a === needle.q && item.q === needle.a) {
+									if (this.drawmode && item.a === needle.q && item.q === needle.a) {
 										return item;
-									} else if (item.q === needle.q && item.a === needle.a) {
+									} else if (!this.drawmode && item.q === needle.q && item.a === needle.a) {
 										return item;
 									}
 								}
@@ -285,12 +286,12 @@
 								var hist = find(item);
 								if (!hist)
 									return false;
+								if (!hist.attempts)
+									return false;
 									
-								if (hist.attempts) {
-									var score = hist.successes / hist.attempts;
-									if (score < this.threshold)
-										return false;
-								}
+								var score = hist.successes / hist.attempts;
+								if (score < this.threshold)
+									return false;
 							}
 							return true;
 						}.bind(this));
@@ -432,6 +433,12 @@
 					drawincorrect: function() {
 						this.current.attempts++;
 						this.pick();
+					},
+					togglehistory: function() {
+						this.viewhistory = !this.viewhistory;
+					},
+					clearhistory: function() {
+						this.history.splice(0);
 					},
 					
 					//Drawing Handlers
@@ -740,7 +747,41 @@
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div>
-			<div v-if="!current">
+			<div v-if="viewhistory">
+				<div v-if="history.length">
+					<h3 class="m-2"><span v-if="drawmode">Draw</span><span v-else>Write</span> History:</h3>
+					<table class="table table-striped">
+						<thead>
+							<tr>
+								<th>Test</th>
+								<th>Y</th>
+								<th>N</th>
+								<th>Score</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="item in history" v-if="drawmode === !!item.flip && item.attempts !== 0">
+								<td>{{item.q}}&#x2192;{{item.a}}</td>
+								<td>{{item.successes}}</td>
+								<td>{{item.attempts}}</td>
+								<td>{{(item.successes / item.attempts).toFixed(2)}}</td>
+							</tr>
+						</tbody>
+					</table>
+					<p class="text-center">Only items with scores above zero are displayed.</p>
+				</div>
+				<div class="row">
+					<div class="col text-center p-3">
+						<button type="button" class="btn btn-primary" v-on:click="clearhistory">
+							Clear History
+						</button>
+						<button type="button" class="btn btn-secondary" v-on:click="togglehistory">
+							Close
+						</button>
+					</div>
+				</div>
+			</div>
+			<div v-else-if="!current">
 				<h1 class="text-center mb-4">JTester</h1>
 				<div class="row align-items-center justify-content-center my-2">
 					<label class="col-5 mb-0 text-right" for="cbdm">Test Mode</label>
@@ -804,10 +845,10 @@
 						</div>
 					</div>
 				</div>
-				<div class="row align-items-center justify-content-center my-2 mt-4">
-					<h3 class="col mb-0 text-center" for="cbts">Test History</h3>
+				<div v-if="history.length" class="row align-items-center justify-content-center my-2 mt-4">
+					<h3 class="col mb-0 text-center" for="cbts">History</h3>
 				</div>
-				<div class="row align-items-center justify-content-center my-2">
+				<div v-if="history.length" class="row align-items-center justify-content-center my-2">
 					<label class="col-5 mb-0 text-right" for="cbts">Score Threshold</label>
 					<div class="col-5">
 						<input v-model="thresholdin" type="text" class="form-control w-50" :class="{error: isNaN(parseFloat(thresholdin))}" />
@@ -817,6 +858,9 @@
 					<div class="col text-center p-3">
 						<button type="button" class="btn btn-primary" v-on:click="pick">
 							Start
+						</button>
+						<button v-if="history.length" type="button" class="btn btn-secondary" v-on:click="togglehistory">
+							View History
 						</button>
 					</div>
 				</div>
