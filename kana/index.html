@@ -133,13 +133,14 @@
 					iswrong: false,
 					answer: "",
 					drawmode: localStorage.getItem("drawmode") === "true",
+					historyfilterthresh: localStorage.getItem("historyfilterthresh") !== "false",
 					allowhiragana: localStorage.getItem("allowhiragana") !== "false",
 					allowkatakana: localStorage.getItem("allowkatakana") !== "false",
 					allowseion: localStorage.getItem("allowseion") !== "false",
 					allowdakuon: localStorage.getItem("allowdakuon") !== "false",
 					allowyoon: localStorage.getItem("allowyoon") !== "false",
-					threshold: parseFloat(localStorage.getItem("threshold") || 0),
-					thresholdin: localStorage.getItem("threshold") || "0",
+					threshold: parseFloat(localStorage.getItem("threshold") || 1),
+					thresholdin: localStorage.getItem("threshold") || "1",
 					drawpoints: {},
 					mousedown: false,
 					isrevealed: false,
@@ -198,6 +199,9 @@
 					},
 					history: function() {
 						localStorage.setItem("history", JSON.stringify(this.history));
+					},
+					historyfilterthresh: function() {
+						localStorage.setItem("historyfilterthresh", this.historyfilterthresh);
 					},
 					drawmode: function() {
 						localStorage.setItem("drawmode", this.drawmode);
@@ -261,6 +265,11 @@
 							this.erase();
 						}.bind(this));
 					},
+					getscore: function(item) {
+						if (!item.incorrect)
+							return 1;
+						return Math.min(1, item.correct / item.incorrect);
+					},
 					reset: function() {
 						//clone the database
 						var clone = JSON.parse(JSON.stringify(this.master)),
@@ -278,6 +287,7 @@
 							}.bind(this);
 						
 						//Apply filters
+						var hasHistory = this.history.length;
 						this.list = clone.filter(function(item) {
 							if (item.t === "h" && !this.allowhiragana)
 								return false;
@@ -289,15 +299,13 @@
 								return false;
 							if (item.y && !this.allowyoon)
 								return false;
-							if (this.threshold > 0) {
-								var hist = find(item);
-								if (!hist)
-									return false;
-								if (!hist.incorrect)
-									return false;
-									
-								var score = hist.correct / hist.incorrect;
-								if (score < this.threshold)
+							if (hasHistory) {
+								var hist = find(item),
+									score = 1;
+								
+								if (hist)
+									score = this.getscore(hist);
+								if (score > this.threshold)
 									return false;
 							}
 							return true;
@@ -453,7 +461,12 @@
 						this.viewhistory = !this.viewhistory;
 					},
 					clearhistory: function() {
-						this.history.splice(0);
+						var len = this.history.length;
+						while(len--) {
+							if (!!this.history[len].flip === this.drawmode) {
+								this.history.splice(len, 1);
+							}
+						}
 					},
 					
 					//Drawing Handlers
@@ -810,20 +823,25 @@
 							</tr>
 						</thead>
 						<tbody>
-							<tr v-for="item in history" v-if="drawmode === !!item.flip && item.incorrect !== 0">
+							<tr v-for="item in history" v-if="drawmode === !!item.flip && (!historyfilterthresh || (historyfilterthresh && (getscore(item) <= threshold)))">
 								<td>{{item.q}}&#x2192;{{item.a}}</td>
 								<td>{{item.correct}}</td>
 								<td>{{item.incorrect}}</td>
-								<td>{{(item.correct / item.incorrect).toFixed(2)}}</td>
+								<td>{{getscore(item).toFixed(2)}}</td>
 							</tr>
 						</tbody>
 					</table>
-					<p class="text-center">Only items with scores above zero are displayed.</p>
+					<div class="form-check m-3">
+						<input class="form-check-input" type="checkbox" v-model="historyfilterthresh" id="historyfilterthresh">
+						<label class="form-check-label" for="historyfilterthresh">
+							Only show scores at or below the threshold ({{threshold}})
+						</label>
+					</div>
 				</div>
 				<div class="row">
 					<div class="col text-center p-3">
 						<button v-if="history.length" type="button" class="btn btn-primary" v-on:click="clearhistory">
-							Clear History
+							Clear <span v-if="drawmode">Draw</span><span v-else>Write</span> History
 						</button>
 						<button type="button" class="btn btn-secondary" v-on:click="togglehistory">
 							Close
