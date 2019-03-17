@@ -197,8 +197,11 @@
 							}
 						});
 					},
-					history: function() {
-						localStorage.setItem("history", JSON.stringify(this.history));
+					history: {
+						handler: function() {
+							localStorage.setItem("history", JSON.stringify(this.history));
+						},
+						deep: true
 					},
 					historyfilterthresh: function() {
 						localStorage.setItem("historyfilterthresh", this.historyfilterthresh);
