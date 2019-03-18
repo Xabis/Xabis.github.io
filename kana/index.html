@@ -8,7 +8,8 @@
 	<script src="https://unpkg.com/popper.js/dist/umd/popper.min.js"></script>
 	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">	
 	<script>
-		//s: seion; d: dakuon; y: yoon
+		//a: answer; q: question; dd: draw display (de-dupe/clarification)
+		//t: type (h, k); s: seion; d: daku; y: yoon
 		var kana = [
 			{a:"a",q:"あ",t:"h",s:1},{a:"a",q:"ア",t:"k",s:1},
 			{a:"i",q:"い",t:"h",s:1},{a:"i",q:"イ",t:"k",s:1},
@@ -48,6 +49,14 @@
 			{a:"ya",q:"や",t:"h",s:1},{a:"ya",q:"ヤ",t:"k",s:1},
 			{a:"yu",q:"ゆ",t:"h",s:1},{a:"yu",q:"ユ",t:"k",s:1},
 			{a:"yo",q:"よ",t:"h",s:1},{a:"yo",q:"ヨ",t:"k",s:1},
+			{a:"ra",q:"ら",t:"h",s:1},{a:"ra",q:"ラ",t:"k",s:1},
+			{a:"ri",q:"り",t:"h",s:1},{a:"ri",q:"リ",t:"k",s:1},
+			{a:"ru",q:"る",t:"h",s:1},{a:"ru",q:"ル",t:"k",s:1},
+			{a:"re",q:"れ",t:"h",s:1},{a:"re",q:"レ",t:"k",s:1},
+			{a:"ro",q:"ろ",t:"h",s:1},{a:"ro",q:"ロ",t:"k",s:1},
+			{a:"wa",q:"わ",t:"h",s:1},{a:"wa",q:"ワ",t:"k",s:1},
+			{a:"o",q:"を",dd:"o(wo)",t:"h",s:1},{a:"o",q:"ヲ",dd:"o(wo)",t:"k",s:1},
+			{a:"n",q:"ん",t:"h",s:1},{a:"n",q:"ン",t:"k",s:1},
 			{a:"ga",q:"が",t:"h",d:1},{a:"ga",q:"ガ",t:"k",d:1},
 			{a:"gi",q:"ぎ",t:"h",d:1},{a:"gi",q:"ギ",t:"k",d:1},
 			{a:"gu",q:"ぐ",t:"h",d:1},{a:"gu",q:"グ",t:"k",d:1},
@@ -59,8 +68,8 @@
 			{a:"ze",q:"ぜ",t:"h",d:1},{a:"ze",q:"ゼ",t:"k",d:1},
 			{a:"zo",q:"ぞ",t:"h",d:1},{a:"zo",q:"ゾ",t:"k",d:1},
 			{a:"da",q:"だ",t:"h",d:1},{a:"da",q:"ダ",t:"k",d:1},
-			{a:"ji",q:"ぢ",t:"h",d:1},{a:"ji",q:"ヂ",t:"k",d:1},
-			{a:"zu",q:"づ",t:"h",d:1},{a:"zu",q:"ヅ",t:"k",d:1},
+			{a:"ji",q:"ぢ",dd:"ji(di)",t:"h",d:1},{a:"ji",q:"ヂ",dd:"ji(di)",t:"k",d:1},
+			{a:"zu",q:"づ",dd:"zu(du)",t:"h",d:1},{a:"zu",q:"ヅ",dd:"zu(du)",t:"k",d:1},
 			{a:"de",q:"で",t:"h",d:1},{a:"de",q:"デ",t:"k",d:1},
 			{a:"do",q:"ど",t:"h",d:1},{a:"do",q:"ド",t:"k",d:1},
 			{a:"ba",q:"ば",t:"h",d:1},{a:"ba",q:"バ",t:"k",d:1},
@@ -968,7 +977,7 @@
 				</div>
 				<div>
 					<div class="row">
-						<div class="col col-9 mx-auto py-1 px-2 text-center h3"><span v-if="!current.finished">Draw: </span>{{current.q}} <span class="ml-2" v-if="current.t">({{this.types[current.t].abbr}})</span></div>
+						<div class="col col-9 mx-auto py-1 px-2 text-center h3"><span v-if="!current.finished">Draw: </span>{{current.dd||current.q}} <span class="ml-2" v-if="current.t">({{this.types[current.t].abbr}})</span></div>
 					</div>
 					<div v-if="isfinished" class="text-center py-1">
 						<button class="btn btn-secondary mx-2" type="button" v-on:click="reveal">
