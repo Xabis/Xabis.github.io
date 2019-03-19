@@ -975,7 +975,7 @@
 					<button class="btn btn-primary" type="button" v-on:click="mainmenu">Main Menu</button> 
 					<button class="btn btn-primary" type="button" v-on:click="pick">Start Again</button> 
 				</div>
-				<div>
+				<div v-else>
 					<div class="row">
 						<div class="col col-9 mx-auto py-1 px-2 text-center h3"><span v-if="!current.finished">Draw: </span>{{current.dd||current.q}} <span class="ml-2" v-if="current.t">({{this.types[current.t].abbr}})</span></div>
 					</div>
