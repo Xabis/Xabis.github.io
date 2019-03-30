@@ -2,7 +2,7 @@
 <html>
 <head>
 	<meta charset="utf-8" />
-	<meta name="viewport" content="width=device-width, maximum-scale=1.0">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
 	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 	<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
 	<script src="https://unpkg.com/popper.js/dist/umd/popper.min.js"></script>
@@ -631,6 +631,7 @@
 		});
 	</script>
 	<style>
+		button {touch-action: manipulation;}
 		.glyph {font-size: 10em;}
 		.wrong {border-color: #f00 !important;}
 		.progressbar {
@@ -764,15 +765,14 @@
 			width: 256px;
 			height: 256px;
 			position: absolute;
-			background: #fff;
-			
 		}
-		.drawarea.reveal canvas {
-			background: rgba(255, 255, 255, .5);
-		}
-		svg {
+		.drawarea svg {
 			height: 256px;
 			width: 256px;
+			opacity: 0;
+		}
+		.drawarea.reveal svg {
+			opacity: 0.5;
 		}
 		text {
 			font-size:128px;
