@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.10/vue.js"></script>
+	<script src="https://unpkg.com/popper.js/dist/umd/popper.min.js"></script>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">	
+	<script>
+		//ka: kana; kj: kanji; t: translation (pipe delimited answers)
+		//l: level number (e.g. n1-n5)
+		var database = [
+			{ka:"あさごはん",kj:"朝御飯",t:"breakfast",l:5},
+			{ka:"あさって",t:"day after tomorrow",l:5},
+		];
+		
+		$(function() {
+			new Vue({
+				el: "#app",
+				template: "#main",
+				data: {
+					master: database,
+					list: [],
+					finished: [],
+					history: [],
+					total: 0,
+					current: null,
+					fragment: {},
+					iswrong: false,
+					iswrong2: false,
+					answer: "",
+					answer2: "",
+					testmode: localStorage.getItem("testmode") === "true", //f: JPN -> ENG; t: ENG -> JPN
+					historyfilterthresh: localStorage.getItem("historyfilterthresh") !== "false",
+					allown1: localStorage.getItem("allown1") !== "false",
+					allown2: localStorage.getItem("allown2") !== "false",
+					allown3: localStorage.getItem("allown3") !== "false",
+					allown4: localStorage.getItem("allown4") !== "false",
+					allown5: localStorage.getItem("allown5") !== "false",
+					threshold: parseFloat(localStorage.getItem("threshold") || 1),
+					thresholdin: localStorage.getItem("threshold") || "1",
+					drawpoints: {},
+					mousedown: false,
+					attempt: 0,
+					isrevealed: false,
+					isfinished: false,
+					popper: null,
+					error: "",
+					viewhistory: false
+				},
+				mounted: function() {
+					var store = localStorage.getItem("history");
+					if (store) {
+						try {
+							var data = JSON.parse(store);
+							if (data instanceof Array) {
+								this.history = data;
+							}
+						} catch {
+							localStorage.removeItem("history");
+						}
+					}
+				},
+				computed: {
+					fragmentwidth: function() {
+						if (this.total)
+							return (100 / this.total) + "%";
+						return "0px";
+					},
+					progress: function() {
+						if (this.total && this.finished.length)
+							return (this.finished.length / this.total * 100).toFixed(2);
+						return 0;
+					},
+					worklist: function() {
+						return this.finished.filter(function(item) {
+							return item.incorrect;
+						});
+					}
+				},
+				watch: {
+					history: {
+						handler: function() {
+							localStorage.setItem("history", JSON.stringify(this.history));
+						},
+						deep: true
+					},
+					historyfilterthresh: function() {
+						localStorage.setItem("historyfilterthresh", this.historyfilterthresh);
+					},
+					testmode: function() {
+						localStorage.setItem("testmode", this.testmode);
+					},
+					allown1: function() {
+						localStorage.setItem("allown1", this.allown1);
+					},
+					allown2: function() {
+						localStorage.setItem("allown2", this.allown2);
+					},
+					allown3: function() {
+						localStorage.setItem("allown3", this.allown3);
+					},
+					allown4: function() {
+						localStorage.setItem("allown4", this.allown4);
+					},
+					allown5: function() {
+						localStorage.setItem("allown5", this.allown5);
+					},
+					thresholdin: function() {
+						var value = parseFloat(this.thresholdin);
+						if (!isNaN(value)) {
+							this.threshold = value;
+						}
+					},
+					threshold: function() {
+						localStorage.setItem("threshold", this.threshold);
+					}
+				},
+				methods: {
+					pick: function() {
+						this.attempt = 0;
+						this.isrevealed = false;
+						this.isfinished = false;
+						this.error = "";
+
+						if (!this.list.length) {
+							this.reset();
+							
+							//too many filters applied
+							if (!this.list.length) {
+								this.error = "No items to test. Try removing filters";
+								return;
+							}
+						}
+						
+						//pick next question, but dont allow reask the same question back to back
+						var pick = this.list[Math.floor(Math.random()*this.list.length)];
+						if (pick === this.current && this.list.length > 1)
+							return this.pick();
+						this.current = pick;
+						
+						if ("undefined" === typeof this.current.correct)
+							Vue.set(this.current, "correct", 0);
+						if ("undefined" === typeof this.current.incorrect)
+							Vue.set(this.current, "incorrect", 0);
+						if ("undefined" === typeof this.current.viewed)
+							Vue.set(this.current, "viewed", 0);
+					},
+					getscore: function(item) {
+						if (!item.incorrect)
+							return 1;
+						return Math.min(1, item.correct / item.incorrect);
+					},
+					reset: function() {
+						this.list.splice(0);
+						this.finished.splice(0);
+						this.master.forEach(function(item) {
+							//filter out unselected levels
+							if (item.l === 1 && !this.allown1)
+								return;
+							if (item.l === 2 && !this.allown2)
+								return;
+							if (item.l === 3 && !this.allown3)
+								return;
+							if (item.l === 4 && !this.allown4)
+								return;
+							if (item.l === 5 && !this.allown5)
+								return;
+							
+							//clone and setup direction based on test mode
+							var answers = item.t.split("|"),
+								newitem = {};
+								
+							if (this.testmode) {
+								//ENG -> JPN
+								newitem.q = answers[0];
+								newitem.a = item.kj || item.ka;
+							} else {
+								//JPN -> ENG
+								newitem.q = item.kj || item.ka;
+								if (item.kj)
+									newitem.p = item.ka;
+									
+								if (answers.length === 1) {
+									newitem.a = answers[0];
+								} else {
+									newitem.a = answers;
+								}
+							}
+							this.list.push(newitem);
+						}.bind(this));
+						this.total = this.list.length; //#TODO: this is probably not needed. just use list.length directly
+					},
+					mainmenu: function() {
+						this.list.splice(0);
+						this.finished.splice(0);
+						this.total = 0;
+						this.current = null;
+					},
+					track: function() {
+						if (!this.current)
+							return;
+						
+						var fidx = -1;
+							len = this.history.length;
+						for (var i = 0; i < len; i++) {
+							if (this.history[i].q === this.current.q) {
+								fidx = i;
+								break;
+							}
+						}
+						
+						if (fidx === -1) {
+							this.history.push(this.current);
+						} else {
+							this.history[fidx].incorrect += this.current.incorrect;
+							this.history[fidx].correct += this.current.correct;
+						}
+					},
+					check: function(e) {
+						e.preventDefault && e.preventDefault();
+						
+						//restart list if empty
+						if (!this.list.length)
+							return this.pick();
+							
+						var answer = this.answer.toLowerCase(),
+							answer2 = this.answer2.toLowerCase(),
+							answers = this.current.a;
+						if (!answer) //dont penalize for blank entry
+							return;
+						if (!answer2 && this.current.p)
+							return;
+							
+						this.iswrong = false;
+						this.iswrong2 = false;
+						if (this.current.a instanceof Array && this.current.a.indexOf(answer) === -1) {
+							this.iswrong = true;
+						} else if (typeof this.current.a === "string" && this.current.a !== answer) {
+							this.iswrong = true;
+						}
+						if (this.current.p && answer2 !== this.current.p)
+							this.iswrong2 = true;
+							
+						if (this.iswrong || this.iswrong2) {
+							this.current.incorrect++;
+							this.attempt++;
+						} else {
+							//if this is the first time this node was completed, add to the finish pile for display
+							var fidx = this.finished.indexOf(this.current);
+							if (fidx === -1)
+								this.finished.push(this.current);
+								
+							//remove the item only if there were no misses for this viewing
+							if (this.attempt === 0) {
+								this.current.correct++;
+								this.track();
+								var idx = this.list.indexOf(this.current);
+								if (idx !== -1)
+									this.list.splice(idx, 1);
+							}
+							
+							this.current.viewed++;
+							this.answer = "";
+							this.answer2 = "";
+							$("[name=answer]", this.$el).focus();
+							
+							if (this.list.length) {
+								this.pick();
+							} else {
+								this.current = {ka: ":)", finished: true};
+							}
+						}
+					},				
+					togglehistory: function() {
+						this.viewhistory = !this.viewhistory;
+					},
+					clearhistory: function() {
+						this.history.splice(0);
+					},
+					
+					//Toop tip handlers
+					tipshow: function(el) {
+						if (!el || el.className.indexOf("fragment") === -1)
+							return;
+						
+						if (!this.popper) {
+							this.popper = new Popper(el, $("div.popper", this.$el), {
+								placement: 'top',
+								modifiers: {arrow:{element:'.popper__arrow'}}
+							});
+						} else if (el === this.popper.reference) {
+							return;
+						}
+						
+						var idx = $(el).data("idx");
+						this.fragment = this.finished[idx];
+
+						$(this.popper.popper).addClass("show");
+						this.popper.reference = el;
+						this.popper.update();
+					},
+					tipstart: function(e) {
+						e.preventDefault();
+						var touch = e.touches[0] || e.changedTouches[0],
+							el = document.elementFromPoint(touch.pageX, touch.pageY);
+						this.tipshow(el);
+					},
+					tipmove: function(e) {
+						e.preventDefault();
+						var touch = e.touches[0] || e.changedTouches[0],
+							el = document.elementFromPoint(touch.pageX, touch.pageY);
+						this.tipshow(el);
+					},
+					tipend: function(e) {
+						e.preventDefault();
+						if (this.popper) {
+							this.popper.reference = null;
+							$(this.popper.popper).removeClass("show");
+						}
+					}
+				}
+			});
+		});
+	</script>
+	<style>
+		button {touch-action: manipulation;}
+		.wrong {border-color: #f00 !important;}
+		.progressbar {
+			border-bottom: solid 2px #ccc;
+			height: 30px;
+		}
+		.progressbar .fragment {
+			height: 100%;
+		}
+		.progressbar .fragment.selected {
+			outline: solid 2px #f00;
+			z-index: 1;
+			position: relative;
+		}
+		.progressbar .fragment.selected:after {
+			content: "";
+			width: 0; 
+			height: 0; 
+			border-left: 5px solid transparent;
+			border-right: 5px solid transparent;
+			border-bottom: 5px solid black;
+			left: 50%;
+			margin-left: -2.5px;
+			position: absolute;
+			bottom: 0%;
+			margin-bottom: -20px;
+		}
+		.progressbar .fragment.selected > .viewcount {
+			position: absolute;
+			bottom: 0%;
+			margin-bottom: -45px;
+			width: 100%;
+			white-space: nowrap;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.progressbar .perfect {
+			background-color: #b9eab9;
+		}
+		.progressbar .pickup {
+			background-color: #fcff56;
+		}
+		.progressbar .missed {
+			background-color: #ff8e8e;
+		}
+		.popper {
+			position: absolute;
+			background: #FFC107;
+			color: black;
+			width: 120px;
+			border-radius: 3px;
+			box-shadow: 0 0 2px rgba(0,0,0,0.5);
+			padding: 10px;
+			text-align: center;
+			display: none;
+			z-index: 4;
+		}
+		.popper.show {
+			display: block;
+		}
+		.popper .popper__arrow {
+			width: 0;
+			height: 0;
+			border-style: solid;
+			position: absolute;
+			margin: 5px;
+		}
+		.popper .popper__arrow {
+			border-color: #FFC107;
+		}
+		.popper[x-placement^="top"] {
+			margin-bottom: 5px;
+		}
+		.popper[x-placement^="top"] .popper__arrow {
+			border-width: 5px 5px 0 5px;
+			border-left-color: transparent;
+			border-right-color: transparent;
+			border-bottom-color: transparent;
+			bottom: -5px;
+			left: calc(50% - 5px);
+			margin-top: 0;
+			margin-bottom: 0;
+		}
+		.popper[x-placement^="bottom"] {
+			margin-top: 5px;
+		}
+		.popper[x-placement^="bottom"] .popper__arrow {
+			border-width: 0 5px 5px 5px;
+			border-left-color: transparent;
+			border-right-color: transparent;
+			border-top-color: transparent;
+			top: -5px;
+			left: calc(50% - 5px);
+			margin-top: 0;
+			margin-bottom: 0;
+		}
+		.popper[x-placement^="right"] {
+			margin-left: 5px;
+		}
+		.popper[x-placement^="right"] .popper__arrow {
+			border-width: 5px 5px 5px 0;
+			border-left-color: transparent;
+			border-top-color: transparent;
+			border-bottom-color: transparent;
+			left: -5px;
+			top: calc(50% - 5px);
+			margin-left: 0;
+			margin-right: 0;
+		}
+		.popper[x-placement^="left"] {
+			margin-right: 5px;
+		}
+		.popper[x-placement^="left"] .popper__arrow {
+			border-width: 5px 0 5px 5px;
+			border-top-color: transparent;
+			border-right-color: transparent;
+			border-bottom-color: transparent;
+			right: -5px;
+			top: calc(50% - 5px);
+			margin-left: 0;
+			margin-right: 0;
+		}
+		.onoffswitch {
+			position: relative; width: 40px;
+			-webkit-user-select:none; -moz-user-select:none; -ms-user-select: none;
+		}
+		.onoffswitch-checkbox {
+			display: none;
+		}
+		.onoffswitch-label {
+			display: block; overflow: hidden; cursor: pointer;
+			height: 20px; padding: 0; margin: 0; line-height: 20px;
+			border: 2px solid #E3E3E3; border-radius: 20px;
+			background-color: #FFFFFF;
+			transition: background-color 0.3s ease-in;
+		}
+		.onoffswitch-label:before {
+			content: "";
+			display: block; width: 20px; margin: 0px;
+			background: #FFFFFF;
+			position: absolute; top: 0; bottom: 0;
+			right: 18px;
+			border: 2px solid #E3E3E3; border-radius: 20px;
+			transition: all 0.3s ease-in 0s; 
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label {
+			background-color: #4693EB;
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label, .onoffswitch-checkbox:checked + .onoffswitch-label:before {
+			border-color: #4693EB;
+		}
+		.onoffswitch-checkbox:checked + .onoffswitch-label:before {
+			right: 0px;
+		}
+		input.error,
+		input.error:focus {
+			border-color: #f00;
+			background: #f7b2b2;
+		}
+		
+		@media (max-width: 450px) {
+			.progressbar {
+				height: 50px;
+			}
+		}
+	</style>
+	<script id="main" type="text/x-vue-template">
+		<div class="p-4">
+			<div v-if="viewhistory">
+				<div v-if="history.length">
+					<h3 class="m-2">History:</h3>
+					<table class="table table-striped">
+						<thead>
+							<tr>
+								<th>Test</th>
+								<th>Y</th>
+								<th>N</th>
+								<th>Score</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="item in history" v-if="!historyfilterthresh || (historyfilterthresh && (getscore(item) <= threshold))">
+								<td>
+									{{item.q}}&#x2192;
+									<ul v-if="item.a instanceof Array">
+										<li v-for="value in item.a">{{value}}</li>
+									</ul>
+									<span v-else>{{item.a}}</span>
+								</td>
+								<td>{{item.correct}}</td>
+								<td>{{item.incorrect}}</td>
+								<td>{{getscore(item).toFixed(2)}}</td>
+							</tr>
+						</tbody>
+					</table>
+					<div class="form-check m-3">
+						<input class="form-check-input" type="checkbox" v-model="historyfilterthresh" id="historyfilterthresh">
+						<label class="form-check-label" for="historyfilterthresh">
+							Only show scores at or below the threshold ({{threshold}})
+						</label>
+					</div>
+				</div>
+				<div class="row">
+					<div class="col text-center p-3">
+						<button v-if="history.length" type="button" class="btn btn-primary" v-on:click="clearhistory">
+							Clear History
+						</button>
+						<button type="button" class="btn btn-secondary" v-on:click="togglehistory">
+							Close
+						</button>
+					</div>
+				</div>
+			</div>
+			<div v-else-if="!current">
+				<h1 class="text-center mb-4">JTester</h1>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbdm">Test Mode</label>
+					<div class="col-5">
+						<div class="onoffswitch d-inline-block align-middle">
+							<input v-model="testmode" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbtm">
+							<label class="onoffswitch-label" for="cbtm"></label>
+						</div>
+						<span class="align-middle ml-2" v-if="testmode">ENG - JPN</span>
+						<span class="align-middle ml-2" v-else>JPN -> ENG</span>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2 mt-4">
+					<h3 class="col mb-0 text-center" for="cbts">Level Filters</h3>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">N5</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allown5" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbn5">
+							<label class="onoffswitch-label" for="cbn5"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">N4</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allown4" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbn4">
+							<label class="onoffswitch-label" for="cbn4"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">N3</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allown3" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbn3">
+							<label class="onoffswitch-label" for="cbn3"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">N2</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allown2" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbn2">
+							<label class="onoffswitch-label" for="cbn2"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbts">N1</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="allown1" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbn1">
+							<label class="onoffswitch-label" for="cbn1"></label>
+						</div>
+					</div>
+				</div>
+				<div class="row">
+					<div class="col text-center p-3">
+						<button type="button" class="btn btn-primary" v-on:click="pick">
+							Start
+						</button>
+						<button v-if="history.length" type="button" class="btn btn-secondary" v-on:click="togglehistory">
+							View History
+						</button>
+					</div>
+				</div>
+				<div v-if="error" class="row">
+					<div class="col text-center p-3 h5">
+						{{error}}
+					</div>
+				</div>
+			</div>
+			<div v-else>
+				<h1 class="glyph p-0 text-center">{{current.q}}</h1>
+				<div class="row">
+					<div class="col col-9 mx-auto py-1 px-2">
+						<form v-on:submit="check">
+							<div v-if="current.finished" class="text-center">
+								<button class="btn btn-primary" type="button" v-on:click="mainmenu">Main Menu</button> 
+								<button class="btn btn-primary" type="submit">Start Again</button> 
+							</div>
+							<div v-else>
+								<div v-if="current.p" class="input-group mb-2">
+									<label for="answer2" class="mr-2 col-form-label">Kana:</label>
+									<input type="text" id="answer2" name="answer2" class="form-control" :class="{'wrong': iswrong2}" autocorrect="off" autocomplete="off" v-model.trim="answer2" />
+								</div>
+								<div class="input-group">
+									<label for="answer" class="mr-2 col-form-label">ENG:</label>
+									<input type="text" id="answer" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" autocomplete="off" v-model.trim="answer" />
+									<div class="input-group-append">
+										<button class="btn btn-primary" :class="{'btn-danger': iswrong || iswrong2}" type="submit">Go</button> 
+									</div>
+								</div>
+								<div v-if="attempt > 2" class="mt-4">
+									<p v-if="current.p">Kana: {{current.p}}</p>
+									<div v-if="current.a instanceof Array">
+										<p>Translations:</p>
+										<ul>
+											<li v-for="value in current.a">{{value}}</li>
+										</ul>
+									</div>
+									<p v-else>Translation: {{current.a}}</p>									
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>		
+			<div v-if="this.total" class="row">
+				<div class="col col-9 mx-auto py-1 px-2 d-flex align-items-center">
+					<div class="d-flex flex-grow-1 pb-2 progressbar" v-on:touchstart="tipstart" v-on:touchmove="tipmove" v-on:touchend="tipend" v-on:touchcancel="tipend">
+						<span v-for="(item, index) in finished" :data-idx="index" :style="{width: fragmentwidth}" class="fragment" :class="{perfect: !item.incorrect, pickup: item.incorrect > 0 && item.incorrect < 3, missed: item.incorrect > 2, selected: current === item}" :title="'Correct: '+item.correct+' / Incorrect: '+item.incorrect">
+							<span v-if="current === item" class="viewcount">Attempt #{{item.viewed+1}}</span>
+						</span>
+					</div>
+					<label class="m-0 pl-2 small">{{progress}}%</label>
+				</div>
+			</div>
+			<div v-if="current && current.finished && worklist.length" class="row">
+				<div class="col col-9 mx-auto">
+					<h3 class="my-2">Needs Work:</h3>
+					<ul>
+						<li v-for="item in worklist">					
+							{{item.q}}&#x2192;
+							<ul v-if="item.a instanceof Array">
+								<li v-for="value in item.a">{{value}}</li>
+							</ul>
+							<span v-else>{{item.a}}</span>
+							<span> - {{item.correct}} / {{item.incorrect}}</span>
+						</li>
+					</ul>
+				</div>
+			</div>
+			<div class="popper" role="tooltip">
+				<span v-if="fragment.a">
+					{{fragment.q}}&#x2192;
+					<ul v-if="fragment.a instanceof Array">
+						<li v-for="value in fragment.a">{{value}}</li>
+					</ul>
+					<span v-else>{{fragment.a}}</span>
+					<span> - {{fragment.correct}} / {{fragment.incorrect}}</span>
+				</span>
+				<div class="popper__arrow"></div>
+			</div>
+		</div>
+	</script>
+</head>
+<body>
+	<div id="app"></div>
+</body>
+</html>
