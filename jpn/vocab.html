@@ -748,6 +748,7 @@
 					list: [],
 					finished: [],
 					history: [],
+					marked: [],
 					total: 0,
 					current: null,
 					fragment: {},
@@ -762,6 +763,7 @@
 					allown3: localStorage.getItem("allown3") !== "false",
 					allown4: localStorage.getItem("allown4") !== "false",
 					allown5: localStorage.getItem("allown5") !== "false",
+					markedonly: localStorage.getItem("markedonly") === "true",
 					threshold: parseFloat(localStorage.getItem("threshold") || 1),
 					thresholdin: localStorage.getItem("threshold") || "1",
 					drawpoints: {},
@@ -771,7 +773,8 @@
 					isfinished: false,
 					popper: null,
 					error: "",
-					viewhistory: false
+					viewhistory: false,
+					viewmarks: false
 				},
 				mounted: function() {
 					var store = localStorage.getItem("history");
@@ -783,6 +786,18 @@
 							}
 						} catch {
 							localStorage.removeItem("history");
+						}
+					}
+					
+					var marked = localStorage.getItem("marked");
+					if (marked) {
+						try {
+							var data = JSON.parse(marked);
+							if (data instanceof Array) {
+								this.marked = data;
+							}
+						} catch {
+							localStorage.removeItem("marked");
 						}
 					}
 				},
@@ -810,6 +825,9 @@
 						},
 						deep: true
 					},
+					marked: function() {
+						localStorage.setItem("marked", JSON.stringify(this.marked));
+					},
 					historyfilterthresh: function() {
 						localStorage.setItem("historyfilterthresh", this.historyfilterthresh);
 					},
@@ -830,6 +848,9 @@
 					},
 					allown5: function() {
 						localStorage.setItem("allown5", this.allown5);
+					},
+					markedonly: function() {
+						localStorage.setItem("markedonly", this.markedonly);
 					},
 					thresholdin: function() {
 						var value = parseFloat(this.thresholdin);
@@ -890,6 +911,8 @@
 							if (item.l === 4 && !this.allown4)
 								return;
 							if (item.l === 5 && !this.allown5)
+								return;
+							if (this.markedonly && !this.ismarked(item))
 								return;
 							
 							//clone and setup direction based on test mode
@@ -1018,6 +1041,26 @@
 					},
 					clearhistory: function() {
 						this.history.splice(0);
+					},
+					clearmarks: function() {
+						this.marked.splice(0);
+					},
+					ismarked: function(item) {
+						var id = item.ka+(item.kj||"");
+						if (this.marked.indexOf(id) === -1)
+							return false;
+						return true;
+					},
+					setmark: function(item, index) {
+						var checked = $(this.$refs.cb[index]).is(":checked"),
+							id = item.ka+(item.kj||""),
+							idx = this.marked.indexOf(id);
+						
+						if (checked && idx === -1) {
+							this.marked.push(id);
+						} else if (!checked && idx !== -1) {
+							this.marked.splice(idx, 1);
+						}
 					},
 					
 					//Toop tip handlers
@@ -1234,7 +1277,38 @@
 	</style>
 	<script id="main" type="text/x-vue-template">
 		<div class="p-4">
-			<div v-if="viewhistory">
+			<div v-if="viewmarks">
+				<h3 class="m-2">Test List:</h3>
+				<table class="table table-striped">
+					<thead>
+						<tr>
+							<th>Kanji/Kana</th>
+							<th>Meaning</th>
+							<th>Marked</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="(item, index) in master">
+							<td>{{item.kj || item.ka}}</td>
+							<td>{{item.t}}</td>
+							<td>
+								<input type="checkbox" :checked="ismarked(item)" v-on:change="setmark(item, index)" ref="cb" />
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<div class="row">
+					<div class="col text-center p-3">
+						<button v-if="marked.length" type="button" class="btn btn-primary" v-on:click="clearmarks">
+							Clear All Marks
+						</button>
+						<button type="button" class="btn btn-secondary" v-on:click="viewmarks = false">
+							Close
+						</button>
+					</div>
+				</div>
+			</div>
+			<div v-else-if="viewhistory">
 				<div v-if="history.length">
 					<h3 class="m-2">History:</h3>
 					<table class="table table-striped">
@@ -1293,7 +1367,7 @@
 					</div>
 				</div>
 				<div class="row align-items-center justify-content-center my-2 mt-4">
-					<h3 class="col mb-0 text-center" for="cbts">Level Filters</h3>
+					<h3 class="col mb-0 text-center" for="cbts">Filters</h3>
 				</div>
 				<div class="row align-items-center justify-content-center my-2">
 					<label class="col-5 mb-0 text-right" for="cbts">N5</label>
@@ -1340,6 +1414,15 @@
 						</div>
 					</div>
 				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbmo">Marked Only</label>
+					<div class="col-5">
+						<div class="onoffswitch">
+							<input v-model="markedonly" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbmo">
+							<label class="onoffswitch-label" for="cbmo"></label>
+						</div>
+					</div>
+				</div>
 				<div class="row">
 					<div class="col text-center p-3">
 						<button type="button" class="btn btn-primary" v-on:click="pick">
@@ -1347,6 +1430,9 @@
 						</button>
 						<button v-if="history.length" type="button" class="btn btn-secondary" v-on:click="togglehistory">
 							View History
+						</button>
+						<button type="button" class="btn btn-secondary" v-on:click="viewmarks = true">
+							View Marked
 						</button>
 					</div>
 				</div>
