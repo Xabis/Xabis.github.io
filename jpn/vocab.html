@@ -1289,8 +1289,16 @@
 					</thead>
 					<tbody>
 						<tr v-for="(item, index) in master">
-							<td>{{item.kj || item.ka}}</td>
-							<td>{{item.t}}</td>
+							<td>
+								<p class="m-0" v-for="value in (item.kj || item.ka).split('|')">
+									{{value}}
+								</p>
+							</td>
+							<td>
+								<p class="m-0" v-for="value in (item.t).split('|')">
+									{{value}}
+								</p>
+							</td>
 							<td>
 								<input type="checkbox" :checked="ismarked(item)" v-on:change="setmark(item, index)" ref="cb" />
 							</td>
