@@ -163,7 +163,7 @@
 			{ka:"かえす",kj:"返す",t:"to return something",l:5},
 			{ka:"かえる",kj:"帰る",t:"to go home|to return",l:5},
 			{ka:"かお",kj:"顔",t:"face (person)|face",l:5},
-			{ka:"かかる",t:"to take (eg time|money)|to take",l:5},
+			{ka:"かかる",t:"to take (eg time/money)|to take",l:5},
 			{ka:"かぎ",t:"key|keys",l:5},
 			{ka:"かく",kj:"書く",t:"to write",l:5},
 			{ka:"がくせい",kj:"学生",t:"student",l:5},
@@ -574,7 +574,7 @@
 			{ka:"ひがし",kj:"東",t:"east",l:5},
 			{ka:"～ひき",kj:"～匹",t:"counter for small animals",l:5},
 			{ka:"ひく",kj:"引く",t:"to pull",l:5},
-			{ka:"ひく",kj:"弾く",t:"to play (piano|guitar)|to play",l:5},
+			{ka:"ひく",kj:"弾く",t:"to play (piano/guitar)|to play",l:5},
 			{ka:"ひくい",kj:"低い",t:"short|low",l:5},
 			{ka:"ひこうき",kj:"飛行機",t:"aeroplane|airplane",l:5},
 			{ka:"ひだり",kj:"左",t:"left hand side",l:5},
@@ -594,7 +594,7 @@
 			{ka:"ふうとう",kj:"封筒",t:"envelope",l:5},
 			{ka:"プール",t:"swimming pool",l:5},
 			{ka:"フォーク",t:"fork",l:5},
-			{ka:"ふく",kj:"吹く",t:"to blow (wind|etc)|to blow",l:5},
+			{ka:"ふく",kj:"吹く",t:"to blow (wind/etc)|to blow",l:5},
 			{ka:"ふく",kj:"服",t:"clothes",l:5},
 			{ka:"ふたつ",kj:"二つ",t:"two",l:5},
 			{ka:"ぶたにく",kj:"豚肉",t:"pork",l:5},
@@ -757,6 +757,7 @@
 					answer: "",
 					answer2: "",
 					testmode: localStorage.getItem("testmode") === "true", //f: JPN -> ENG; t: ENG -> JPN
+					kanawrite: localStorage.getItem("kanawrite") === "true", //f: show text; t: must as part of test
 					historyfilterthresh: localStorage.getItem("historyfilterthresh") !== "false",
 					allown1: localStorage.getItem("allown1") !== "false",
 					allown2: localStorage.getItem("allown2") !== "false",
@@ -833,6 +834,9 @@
 					},
 					testmode: function() {
 						localStorage.setItem("testmode", this.testmode);
+					},
+					kanawrite: function() {
+						localStorage.setItem("kanawrite", this.kanawrite);
 					},
 					allown1: function() {
 						localStorage.setItem("allown1", this.allown1);
@@ -990,7 +994,7 @@
 							answers = this.current.a;
 						if (!answer) //dont penalize for blank entry
 							return;
-						if (!answer2 && this.current.p)
+						if (!answer2 && this.current.p && this.kanawrite)
 							return;
 							
 						this.iswrong = false;
@@ -1000,10 +1004,12 @@
 						} else if (typeof this.current.a === "string" && this.current.a !== answer) {
 							this.iswrong = true;
 						}
-						if (this.current.p instanceof Array && this.current.p.indexOf(answer2) === -1) {
-							this.iswrong2 = true;
-						} else if (typeof this.current.p === "string" && this.current.p !== answer2) {
-							this.iswrong2 = true;
+						if (this.kanawrite) {
+							if (this.current.p instanceof Array && this.current.p.indexOf(answer2) === -1) {
+								this.iswrong2 = true;
+							} else if (typeof this.current.p === "string" && this.current.p !== answer2) {
+								this.iswrong2 = true;
+							}
 						}
 							
 						if (this.iswrong || this.iswrong2) {
@@ -1268,6 +1274,10 @@
 			border-color: #f00;
 			background: #f7b2b2;
 		}
+		.kana + .kana:before {
+			content: ",";
+			margin-right: 1em;
+		}
 		
 		@media (max-width: 450px) {
 			.progressbar {
@@ -1364,7 +1374,7 @@
 			<div v-else-if="!current">
 				<h1 class="text-center mb-4">JTester</h1>
 				<div class="row align-items-center justify-content-center my-2">
-					<label class="col-5 mb-0 text-right" for="cbdm">Test Mode</label>
+					<label class="col-5 mb-0 text-right" for="cbtm">Test Mode</label>
 					<div class="col-5">
 						<div class="onoffswitch d-inline-block align-middle">
 							<input v-model="testmode" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbtm">
@@ -1372,6 +1382,17 @@
 						</div>
 						<span class="align-middle ml-2" v-if="testmode">ENG - JPN</span>
 						<span class="align-middle ml-2" v-else>JPN -> ENG</span>
+					</div>
+				</div>
+				<div class="row align-items-center justify-content-center my-2">
+					<label class="col-5 mb-0 text-right" for="cbkm">Kana</label>
+					<div class="col-5">
+						<div class="onoffswitch d-inline-block align-middle">
+							<input v-model="kanawrite" type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="cbkm">
+							<label class="onoffswitch-label" for="cbkm"></label>
+						</div>
+						<span class="align-middle ml-2" v-if="kanawrite">Hide/Write</span>
+						<span class="align-middle ml-2" v-else>Show</span>
 					</div>
 				</div>
 				<div class="row align-items-center justify-content-center my-2 mt-4">
@@ -1460,10 +1481,16 @@
 								<button class="btn btn-primary" type="submit">Start Again</button> 
 							</div>
 							<div v-else>
-								<div v-if="current.p" class="input-group mb-2">
+								<div v-if="current.p && kanawrite" class="input-group mb-2">
 									<label for="answer2" class="mr-2 col-form-label">Kana:</label>
 									<input type="text" id="answer2" name="answer2" class="form-control" :class="{'wrong': iswrong2}" autocorrect="off" autocomplete="off" v-model.trim="answer2" />
 								</div>
+								<h2 v-if="current.p && !kanawrite" class="mb-2 text-center">
+									<template v-if="current.p instanceof Array">
+										<span v-for="item in current.p" class="kana">{{item}}</span>
+									</template>
+									<span v-else>{{current.p}}</span>
+								</h2>
 								<div class="input-group">
 									<label for="answer" class="mr-2 col-form-label">ENG:</label>
 									<input type="text" id="answer" name="answer" class="form-control" :class="{'wrong': iswrong}" autocorrect="off" autocomplete="off" v-model.trim="answer" />
